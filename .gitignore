@@ -1,0 +1,44 @@
+# Dependencies and frontend output
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.vite/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+key.properties
+keystore.properties
+local.properties
+
+# Rust and Tauri output
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/build/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/.idea/
+src-tauri/gen/android/.cxx/
+src-tauri/gen/android/.externalNativeBuild/
+src-tauri/gen/android/captures/
+src-tauri/gen/apple/DerivedData/
+
+# Packages and local diagnostics
+artifacts/
+*.apk
+*.aab
+*.log
+.codex-remote-attachments/
+.agents/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini

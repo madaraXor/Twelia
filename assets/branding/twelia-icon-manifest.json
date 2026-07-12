@@ -1,0 +1,7 @@
+{
+  "default": "twelia-mark-e-transparent.png",
+  "bg_color": "#0d0c0a",
+  "android_bg": "twelia-android-background.png",
+  "android_fg": "twelia-mark-e-transparent.png",
+  "android_fg_scale": 58
+}

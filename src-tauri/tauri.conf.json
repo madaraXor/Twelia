@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Twelia",
+  "version": "1.0.0",
+  "identifier": "app.twelia.client",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Twelia",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 760,
+        "minHeight": 520,
+        "resizable": true,
+        "fullscreen": false,
+        "backgroundColor": "#0d0c0a"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost https:; frame-src 'self' asset: http://asset.localhost http://127.0.0.1:17420 http://*.localhost:17420"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["dofustouch"],
+          "host": "authorized",
+          "appLink": false
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Game",
+    "shortDescription": "Espace de travail multi-session indépendant",
+    "longDescription": "Twelia organise des profils et sessions isolés sans inclure ni modifier les fichiers propriétaires du jeu.",
+    "copyright": "Copyright © 2026 Twelia contributors",
+    "android": {
+      "minSdkVersion": 26
+    }
+  }
+}
