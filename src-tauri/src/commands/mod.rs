@@ -110,6 +110,18 @@ pub fn set_game_session_visibility(
         .map_err(Into::into)
 }
 #[tauri::command]
+pub fn set_game_session_muted(
+    session_id: String,
+    muted: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state
+        .sessions
+        .set_muted(&app, &session_id, muted)
+        .map_err(Into::into)
+}
+#[tauri::command]
 pub fn configure_game_shortcuts(
     session_id: String,
     accelerators: Vec<String>,

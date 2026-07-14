@@ -26,9 +26,11 @@ import {
   type ClientStatus,
 } from "../game/clientService";
 import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
+import { useI18n } from "../i18n/i18n";
 import { useTabStore } from "../tabs/tabStore";
 
 export function HomeTab() {
+  const { t } = useI18n();
   const mobile = isMobilePlatform();
   const accounts = useAccountStore((state) => state.accounts);
   const createAccount = useAccountStore((state) => state.createAccount);
@@ -96,12 +98,12 @@ export function HomeTab() {
   return (
     <main
       className="mx-auto min-h-full w-full max-w-[1080px] space-y-7 px-5 py-7 sm:px-8 sm:py-9"
-      aria-label="Accueil Twelia"
+      aria-label={t("home.label")}
     >
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-3xl">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Espace multi-session
+            {t("home.eyebrow")}
           </p>
           <div className="flex items-center gap-3">
             <img src="/twelia-icon.png" alt="" className="size-11 object-contain sm:size-14" />
@@ -109,13 +111,11 @@ export function HomeTab() {
               Twelia
             </h1>
           </div>
-          <p className="mt-3 text-base leading-7 text-muted-foreground">
-            Gérez vos comptes et ouvrez chaque session dans son propre onglet isolé.
-          </p>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">{t("home.description")}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge variant={clientReady ? "success" : "warning"}>
               {clientReady ? <CircleCheck /> : <CircleAlert />}
-              {clientReady ? "Client prêt" : "Client à configurer"}
+              {clientReady ? t("home.clientReady") : t("home.clientSetup")}
             </Badge>
             <Badge variant="outline" className="font-mono">
               DOFUS Touch {client.version ? `v${client.version}` : "—"}
@@ -128,11 +128,11 @@ export function HomeTab() {
               variant="outline"
               onClick={() => useTabStore.getState().selectTab(lastGameTab.id)}
             >
-              <ArrowLeft /> Revenir au jeu
+              <ArrowLeft /> {t("home.backToGame")}
             </Button>
           )}
           <Button variant="outline" onClick={() => useTabStore.getState().openSettings()}>
-            <Settings /> Paramètres
+            <Settings /> {t("common.settings")}
           </Button>
         </div>
       </header>
@@ -141,17 +141,19 @@ export function HomeTab() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-              {accounts.length} profil{accounts.length > 1 ? "s" : ""}
+              {t(accounts.length === 1 ? "home.profile.one" : "home.profile.other", {
+                count: accounts.length,
+              })}
             </p>
             <h2
               id="accounts-title"
               className="mt-1 font-serif text-2xl font-semibold tracking-[-0.01em]"
             >
-              Comptes enregistrés
+              {t("home.savedAccounts")}
             </h2>
           </div>
           <Button onClick={() => setEditing("new")}>
-            <Plus /> Ajouter un compte
+            <Plus /> {t("home.addAccount")}
           </Button>
         </div>
 
@@ -162,13 +164,11 @@ export function HomeTab() {
                 <UserPlus />
               </div>
               <div>
-                <CardTitle>Créer votre premier profil</CardTitle>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Aucun mot de passe ne sera enregistré.
-                </p>
+                <CardTitle>{t("home.firstProfile")}</CardTitle>
+                <p className="mt-2 text-sm text-muted-foreground">{t("home.noPassword")}</p>
               </div>
               <Button onClick={() => setEditing("new")}>
-                <Plus /> Ajouter un compte
+                <Plus /> {t("home.addAccount")}
               </Button>
             </CardContent>
           </Card>
@@ -194,8 +194,8 @@ export function HomeTab() {
               <span className="grid size-11 place-items-center rounded-full bg-primary/10 text-primary">
                 <Plus className="size-5" />
               </span>
-              <span className="text-sm font-semibold">Nouveau profil</span>
-              <span className="text-xs text-muted-foreground">Aucun mot de passe enregistré</span>
+              <span className="text-sm font-semibold">{t("home.newProfile")}</span>
+              <span className="text-xs text-muted-foreground">{t("home.noPasswordSaved")}</span>
             </button>
           </div>
         )}
@@ -215,19 +215,18 @@ export function HomeTab() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce profil ?</AlertDialogTitle>
+            <AlertDialogTitle>{t("home.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Toutes les données locales de « {deleting?.displayName} » seront supprimées. Cette
-              action est irréversible.
+              {t("home.deleteDescription", { name: deleting?.displayName ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => deleting && void remove(deleting)}
             >
-              Supprimer
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -5,7 +5,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccountStore } from "../accounts/accountStore";
+import { useI18n } from "../i18n/i18n";
 import { isMobilePlatform } from "../platform/platform";
+import { useSettingsStore } from "../settings/settingsStore";
+import { useTabStore } from "../tabs/tabStore";
+import { gameTabId } from "../tabs/tabTypes";
 import { findSessionByAccount, useGameSessionStore } from "./GameSessionManager";
 import { getGameSessionUrl, layoutGameSession } from "./GameRuntime";
 import { type GameAttentionKind } from "./gameAttention";
@@ -19,6 +23,7 @@ import {
 import { computeMobileGameFrameLayout, type MobileGameFrameLayout } from "./mobileGameLayout";
 
 export function GameTab({ accountId }: { accountId: string }) {
+  const { t } = useI18n();
   const account = useAccountStore((state) => state.accounts.find((item) => item.id === accountId));
   const sessions = useGameSessionStore((state) => state.sessions);
   const session = findSessionByAccount(sessions, accountId);
@@ -27,7 +32,10 @@ export function GameTab({ accountId }: { accountId: string }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const mobile = isMobilePlatform();
+  const active = useTabStore((state) => state.activeTabId === gameTabId(accountId));
+  const muteInactiveTabs = useSettingsStore((state) => state.muteInactiveTabs);
   const [mobileUrl, setMobileUrl] = useState<string>();
+  const [mobileBridgeReady, setMobileBridgeReady] = useState(false);
   const [authError, setAuthError] = useState<string>();
   const [mobileFrameLayout, setMobileFrameLayout] = useState<MobileGameFrameLayout>();
 
@@ -124,6 +132,7 @@ export function GameTab({ accountId }: { accountId: string }) {
       };
       if (data?.source !== "twelia-game") return;
       if (data.type === "bridge-ready") {
+        setMobileBridgeReady(true);
         console.info(`Pont du jeu mobile prêt (compatibilité ${data.compatibilityVersion ?? "?"})`);
       }
       if (data.type === "open-auth" && data.url) {
@@ -143,7 +152,7 @@ export function GameTab({ accountId }: { accountId: string }) {
                         "message" in error &&
                         typeof error.message === "string"
                       ? error.message
-                      : "Impossible d’ouvrir le navigateur d’authentification.";
+                      : t("game.authOpenFailed");
                 console.error(message, error);
                 setAuthError(message);
               },
@@ -175,15 +184,23 @@ export function GameTab({ accountId }: { accountId: string }) {
       window.removeEventListener("message", onMessage);
       window.removeEventListener(MOBILE_OAUTH_CALLBACK_EVENT, onOAuth);
     };
-  }, [accountId, mobile, mobileUrl, sessionId]);
+  }, [accountId, mobile, mobileUrl, sessionId, t]);
+
+  useEffect(() => {
+    if (!mobile || !mobileUrl || !mobileBridgeReady) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { source: "twelia-host", type: "set-muted", muted: muteInactiveTabs && !active },
+      new URL(mobileUrl).origin,
+    );
+  }, [active, mobile, mobileBridgeReady, mobileUrl, muteInactiveTabs]);
 
   if (!account) {
     return (
       <main className="grid h-full place-items-center p-6">
         <Alert variant="destructive" className="max-w-lg">
           <TriangleAlert />
-          <AlertTitle>Profil introuvable</AlertTitle>
-          <AlertDescription>Ce compte a été supprimé.</AlertDescription>
+          <AlertTitle>{t("game.profileMissing")}</AlertTitle>
+          <AlertDescription>{t("game.accountDeleted")}</AlertDescription>
         </Alert>
       </main>
     );
@@ -199,7 +216,7 @@ export function GameTab({ accountId }: { accountId: string }) {
         {authError && (
           <Alert variant="destructive" className="absolute left-3 right-3 top-3 z-20 w-auto">
             <TriangleAlert />
-            <AlertTitle>Connexion impossible</AlertTitle>
+            <AlertTitle>{t("game.authFailed")}</AlertTitle>
             <AlertDescription>{authError}</AlertDescription>
           </Alert>
         )}
@@ -243,32 +260,29 @@ export function GameTab({ accountId }: { accountId: string }) {
               </div>
               <CardTitle className="pt-2 text-2xl">
                 {failed
-                  ? "La session n’a pas démarré"
+                  ? t("game.startFailed")
                   : session?.status === "running"
-                    ? "Le client est lancé"
-                    : "Démarrage du client…"}
+                    ? t("game.started")
+                    : t("game.starting")}
               </CardTitle>
               <Badge
                 variant={
                   failed ? "destructive" : session?.status === "running" ? "success" : "warning"
                 }
               >
-                {session?.status ?? "création"}
+                {session?.status ?? t("game.creating")}
               </Badge>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm leading-6 text-muted-foreground">
-                {session?.error ??
-                  "Le jeu se charge directement dans cet onglet avec un stockage isolé pour ce profil."}
+                {session?.error ?? t("game.loadingDescription")}
               </p>
               <Card className="bg-background/50 text-left shadow-none">
                 <CardContent className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 p-4 text-xs">
-                  <span className="text-muted-foreground">Session</span>
+                  <span className="text-muted-foreground">{t("game.session")}</span>
                   <code>{session?.id.slice(0, 8) ?? "—"}</code>
-                  <span className="text-muted-foreground">Isolation</span>
-                  <code className="truncate">
-                    {session?.runtimeDirectory ?? "gérée par Twelia"}
-                  </code>
+                  <span className="text-muted-foreground">{t("game.isolation")}</span>
+                  <code className="truncate">{session?.runtimeDirectory ?? t("game.managed")}</code>
                 </CardContent>
               </Card>
             </CardContent>

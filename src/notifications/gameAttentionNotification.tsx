@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "../tabs/tabStore";
 import { describeGameAttention, type GameAttentionKind } from "../game/gameAttention";
+import { resolveLanguage, translate } from "../i18n/i18n";
+import type { MessageKey } from "../i18n/messages";
 
 type GameAttentionNotificationOptions = {
   accountId: string;
@@ -14,10 +16,10 @@ type GameAttentionNotificationOptions = {
   offerNavigation: boolean;
 };
 
-const ATTENTION_TITLES: Record<GameAttentionKind, string> = {
-  "combat-turn": "À vous de jouer",
-  "party-invitation": "Invitation reçue",
-  "group-fight": "Combat de groupe",
+const ATTENTION_TITLE_KEYS: Record<GameAttentionKind, MessageKey> = {
+  "combat-turn": "notification.combatTurn.title",
+  "party-invitation": "notification.partyInvitation.title",
+  "group-fight": "notification.groupFight.title",
 };
 
 export function showGameAttentionNotification({
@@ -27,10 +29,14 @@ export function showGameAttentionNotification({
   autoSwitched,
   offerNavigation,
 }: GameAttentionNotificationOptions): void {
-  if (!useSettingsStore.getState().showNotifications) return;
+  const settings = useSettingsStore.getState();
+  if (!settings.showNotifications) return;
+  const language = resolveLanguage(settings.language);
+  const t = (key: MessageKey, values?: Record<string, string | number>) =>
+    translate(language, key, values);
 
-  const title = autoSwitched ? "Changement automatique" : ATTENTION_TITLES[kind];
-  const description = describeGameAttention(kind, accountName);
+  const title = autoSwitched ? t("notification.autoSwitch") : t(ATTENTION_TITLE_KEYS[kind]);
+  const description = describeGameAttention(kind, accountName, t);
   const duration = offerNavigation ? 12_000 : 4_500;
 
   toast.custom(
@@ -60,12 +66,12 @@ export function showGameAttentionNotification({
               toast.dismiss(toastId);
             }}
           >
-            Y aller
+            {t("notification.go")}
           </Button>
         )}
         <button
           type="button"
-          aria-label="Fermer la notification"
+          aria-label={t("notification.close")}
           className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={() => toast.dismiss(toastId)}
         >

@@ -11,7 +11,12 @@ import { diagnosticLogger } from "../diagnostics/diagnosticLogger";
 import { findSessionByAccount, useGameSessionStore } from "../game/GameSessionManager";
 import { needsBackgroundGameActivity, type GameAttentionEvent } from "../game/gameAttention";
 import { handleGameAttention } from "../game/handleGameAttention";
-import { keepGameSessionActive, setGameSessionVisibility } from "../game/GameRuntime";
+import {
+  keepGameSessionActive,
+  setGameSessionMuted,
+  setGameSessionVisibility,
+} from "../game/GameRuntime";
+import { useI18n } from "../i18n/i18n";
 import { useMobileGameDeepLinks } from "../game/mobileGameBridge";
 import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import { ShortcutProvider } from "../shortcuts/ShortcutProvider";
@@ -24,6 +29,7 @@ import { startup } from "./startup";
 import { DesktopTitleBar } from "./DesktopTitleBar";
 
 export function App() {
+  const { t } = useI18n();
   useMobileGameDeepLinks();
   const mobile = isMobilePlatform();
   const [ready, setReady] = useState(false);
@@ -34,6 +40,7 @@ export function App() {
   const theme = useSettingsStore((state) => state.theme);
   const reduceMotion = useSettingsStore((state) => state.reduceMotion);
   const suspendInactiveTabs = useSettingsStore((state) => state.suspendInactiveTabs);
+  const muteInactiveTabs = useSettingsStore((state) => state.muteInactiveTabs);
   const keepGamesActive = useSettingsStore(needsBackgroundGameActivity);
 
   useEffect(() => {
@@ -70,8 +77,9 @@ export function App() {
         active.accountId === session.accountId &&
         !["error", "stopped"].includes(session.status);
       void setGameSessionVisibility(session.id, visible).catch(() => undefined);
+      void setGameSessionMuted(session.id, muteInactiveTabs && !visible).catch(() => undefined);
     }
-  }, [activeTabId, ready, sessions]);
+  }, [activeTabId, muteInactiveTabs, ready, sessions]);
 
   useEffect(() => {
     if (!ready || !suspendInactiveTabs) return;
@@ -110,13 +118,23 @@ export function App() {
   useEffect(() => {
     const onBack = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (useCommandUiStore.getState().paletteOpen)
-        return useCommandUiStore.getState().closePalette();
+      if (useCommandUiStore.getState().paletteOpen) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        useCommandUiStore.getState().closePalette();
+        return;
+      }
+      if (
+        event.defaultPrevented ||
+        (event.target as HTMLElement | null)?.closest('[role="dialog"]')
+      )
+        return;
+      if (Date.now() - useCommandUiStore.getState().paletteClosedAt < 250) return;
       if (useTabStore.getState().activeTabId !== "home")
         return useTabStore.getState().selectTab("home");
     };
-    window.addEventListener("keydown", onBack);
-    return () => window.removeEventListener("keydown", onBack);
+    window.addEventListener("keydown", onBack, true);
+    return () => window.removeEventListener("keydown", onBack, true);
   }, []);
 
   useEffect(() => {
@@ -150,7 +168,7 @@ export function App() {
               <img src="/twelia-icon.png" alt="" className="size-full object-contain" />
             </div>
             <strong className="text-2xl">Twelia</strong>
-            <p className="text-sm text-muted-foreground">Restauration de l’espace de travail…</p>
+            <p className="text-sm text-muted-foreground">{t("app.restoring")}</p>
             <Skeleton className="h-1.5 w-32" />
           </CardContent>
         </Card>
@@ -166,7 +184,7 @@ export function App() {
         {startupError && (
           <Alert variant="destructive" className="z-30 rounded-none border-x-0 border-t-0 py-2">
             <AlertCircle />
-            <AlertDescription>Restauration partielle : {startupError}</AlertDescription>
+            <AlertDescription>{t("app.partialRestore", { error: startupError })}</AlertDescription>
           </Alert>
         )}
         <div className="tab-content">

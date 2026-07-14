@@ -3,6 +3,7 @@ import { Maximize2, Minus, Moon, Search, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCommandUiStore } from "../commands/commandStore";
 import { isTauriRuntime } from "../platform/platform";
+import { useI18n } from "../i18n/i18n";
 import { useSettingsStore } from "../settings/settingsStore";
 
 type WindowAction = "minimize" | "toggleMaximize" | "close";
@@ -13,6 +14,7 @@ async function runWindowAction(action: WindowAction) {
 }
 
 export function DesktopTitleBar() {
+  const { t } = useI18n();
   const theme = useSettingsStore((state) => state.theme);
   const updateSetting = useSettingsStore((state) => state.update);
   const resolvedTheme =
@@ -48,7 +50,7 @@ export function DesktopTitleBar() {
         size="sm"
         className="mr-2 h-7 gap-1.5 rounded-[7px] border-border bg-card px-2.5 font-mono text-[10px] font-medium text-muted-foreground shadow-none hover:text-foreground"
         onClick={() => useCommandUiStore.getState().openPalette()}
-        aria-label="Ouvrir la palette de commandes"
+        aria-label={t("titlebar.openCommands")}
       >
         <Search className="size-3.5" />
         <kbd className="rounded border border-border-strong px-1.5 py-0.5 leading-none">Ctrl K</kbd>
@@ -58,7 +60,7 @@ export function DesktopTitleBar() {
         size="icon"
         className="mr-1.5 size-7 rounded-[7px] border-border bg-card text-muted-foreground shadow-none hover:text-foreground"
         onClick={toggleTheme}
-        aria-label={light ? "Utiliser le thème sombre" : "Utiliser le thème clair"}
+        aria-label={light ? t("titlebar.useDark") : t("titlebar.useLight")}
       >
         {light ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
       </Button>
@@ -67,7 +69,7 @@ export function DesktopTitleBar() {
           type="button"
           className="grid w-[46px] place-items-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={() => void runWindowAction("minimize")}
-          aria-label="Réduire"
+          aria-label={t("titlebar.minimize")}
         >
           <Minus className="size-4" strokeWidth={1.5} />
         </button>
@@ -75,7 +77,7 @@ export function DesktopTitleBar() {
           type="button"
           className="grid w-[46px] place-items-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={() => void runWindowAction("toggleMaximize")}
-          aria-label="Agrandir ou restaurer"
+          aria-label={t("titlebar.maximize")}
         >
           <Maximize2 className="size-3.5" strokeWidth={1.5} />
         </button>
@@ -83,7 +85,7 @@ export function DesktopTitleBar() {
           type="button"
           className="grid w-[46px] place-items-center text-muted-foreground transition-colors hover:bg-[#c4483e] hover:text-white"
           onClick={() => void runWindowAction("close")}
-          aria-label="Fermer"
+          aria-label={t("common.close")}
         >
           <X className="size-4" strokeWidth={1.5} />
         </button>

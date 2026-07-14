@@ -87,6 +87,7 @@ pub fn run() {
             commands::open_external_auth_url,
             commands::layout_game_session,
             commands::set_game_session_visibility,
+            commands::set_game_session_muted,
             commands::configure_game_shortcuts,
             commands::suspend_game_session,
             commands::keep_game_session_active,

@@ -1,4 +1,5 @@
 import type { AppSettings } from "../settings/settingsStore";
+import { translate, type Translate } from "../i18n/i18n";
 
 export type GameAttentionKind = "combat-turn" | "party-invitation" | "group-fight";
 
@@ -55,14 +56,20 @@ export function decideGameAttention(
   };
 }
 
-export function describeGameAttention(kind: GameAttentionKind, accountName?: string): string {
-  const target = accountName ? ` sur « ${accountName} »` : " sur ce compte";
+export function describeGameAttention(
+  kind: GameAttentionKind,
+  accountName?: string,
+  translator: Translate = (key, values) => translate("fr", key, values),
+): string {
+  const target = accountName
+    ? translator("notification.target.named", { name: accountName })
+    : translator("notification.target.account");
   switch (kind) {
     case "combat-turn":
-      return `Tour de combat${target}`;
+      return translator("notification.combatTurn.description", { target });
     case "party-invitation":
-      return `Invitation reçue${target}`;
+      return translator("notification.partyInvitation.description", { target });
     case "group-fight":
-      return `Combat de groupe${target}`;
+      return translator("notification.groupFight.description", { target });
   }
 }

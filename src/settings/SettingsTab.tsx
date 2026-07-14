@@ -38,11 +38,14 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
+import { matchesSearch } from "../commands/search";
 import { toTweliaError } from "../core/errors";
 import { diagnosticLogger } from "../diagnostics/diagnosticLogger";
 import type { DiagnosticEvent, LogLevel } from "../diagnostics/diagnosticTypes";
 import { sanitizeObject } from "../diagnostics/redaction";
 import { useGameSessionStore } from "../game/GameSessionManager";
+import { useI18n } from "../i18n/i18n";
+import type { MessageKey } from "../i18n/messages";
 import { needsBackgroundGameActivity } from "../game/gameAttention";
 import {
   getClientStatus,
@@ -57,16 +60,17 @@ import { useShortcutStore } from "../shortcuts/shortcutStore";
 import type { ShortcutAction } from "../shortcuts/shortcutTypes";
 import type { SettingsSection } from "../tabs/tabTypes";
 import { useSettingsStore, type AppSettings } from "./settingsStore";
+import { SETTING_SEARCH_ENTRIES } from "./settingsCatalog";
 
-const sections: Array<[SettingsSection, string, typeof AppWindow]> = [
-  ["general", "Général", AppWindow],
-  ["accounts", "Comptes", Users],
-  ["interface", "Interface", Palette],
-  ["shortcuts", "Raccourcis", Keyboard],
-  ["client", "Client", Gamepad2],
-  ["performance", "Performances", Gauge],
-  ["logs", "Journaux", ScrollText],
-  ["about", "À propos", Info],
+const sections: Array<[SettingsSection, MessageKey, typeof AppWindow]> = [
+  ["general", "settings.section.general", AppWindow],
+  ["accounts", "settings.section.accounts", Users],
+  ["interface", "settings.section.interface", Palette],
+  ["shortcuts", "settings.section.shortcuts", Keyboard],
+  ["client", "settings.section.client", Gamepad2],
+  ["performance", "settings.section.performance", Gauge],
+  ["logs", "settings.section.logs", ScrollText],
+  ["about", "settings.section.about", Info],
 ];
 
 const sectionSearchTerms: Record<SettingsSection, string> = {
@@ -82,19 +86,35 @@ const sectionSearchTerms: Record<SettingsSection, string> = {
   about: "à propos version licence ankama sécurité",
 };
 
+const CLIENT_PROGRESS_KEYS: Record<string, MessageKey> = {
+  starting: "settings.client.phase.starting",
+  metadata: "settings.client.phase.metadata",
+  download: "settings.client.phase.download",
+  versions: "settings.client.phase.versions",
+  compatibility: "settings.client.phase.compatibility",
+  install: "settings.client.phase.install",
+  complete: "settings.client.phase.complete",
+};
+
 export function SettingsTab({ initialSection = "general" }: { initialSection?: SettingsSection }) {
+  const { t } = useI18n();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
   const visibleSections = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("fr");
-    if (!normalized) return sections;
-    return sections.filter(
-      ([id, label]) =>
-        label.toLocaleLowerCase("fr").includes(normalized) ||
-        sectionSearchTerms[id].includes(normalized),
+    if (!query.trim()) return sections;
+    return sections.filter(([id, labelKey]) =>
+      matchesSearch(
+        query,
+        t(labelKey),
+        sectionSearchTerms[id],
+        ...SETTING_SEARCH_ENTRIES.filter((entry) => entry.section === id).flatMap((entry) => [
+          t(entry.labelKey),
+          entry.keywords,
+        ]),
+      ),
     );
-  }, [query]);
+  }, [query, t]);
   const activeSection = visibleSections.some(([id]) => id === section)
     ? section
     : (visibleSections[0]?.[0] ?? section);
@@ -111,10 +131,10 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
     >
       <header className="shrink-0 border-b border-border bg-background px-5 py-6 sm:px-8">
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
-          Configuration
+          {t("settings.configuration")}
         </p>
         <h1 className="mt-2 font-serif text-4xl font-semibold leading-none tracking-[-0.01em]">
-          Paramètres
+          {t("settings.title")}
         </h1>
       </header>
       <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)] lg:grid-rows-1">
@@ -127,24 +147,24 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Rechercher un réglage…"
+              placeholder={t("settings.search.placeholder")}
               className="h-10 bg-card pl-9 text-[13px]"
-              aria-label="Rechercher dans les paramètres"
+              aria-label={t("settings.search.label")}
             />
           </div>
           <TabsList className="mt-3 flex h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 lg:grid">
-            {visibleSections.map(([id, label, Icon]) => (
+            {visibleSections.map(([id, labelKey, Icon]) => (
               <TabsTrigger
                 key={id}
                 value={id}
                 className="h-10 shrink-0 justify-start gap-2.5 rounded-[9px] px-3 text-[13px] data-[state=active]:bg-surface-elevated data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none lg:w-full"
               >
-                <Icon className="size-4" /> {label}
+                <Icon className="size-4" /> {t(labelKey)}
               </TabsTrigger>
             ))}
           </TabsList>
           {visibleSections.length === 0 && (
-            <p className="px-2 py-5 text-sm text-muted-foreground">Aucun réglage trouvé.</p>
+            <p className="px-2 py-5 text-sm text-muted-foreground">{t("settings.search.empty")}</p>
           )}
         </aside>
         <div
@@ -281,70 +301,95 @@ function useUpdateSetting() {
   return useSettingsStore((state) => state.update);
 }
 
+function shortcutLabel(action: ShortcutAction, t: ReturnType<typeof useI18n>["t"]): string {
+  if (action.startsWith("select-tab-")) {
+    return t("shortcut.selectTab", { number: action.slice("select-tab-".length) });
+  }
+  const keys: Record<Exclude<ShortcutAction, `select-tab-${number}`>, MessageKey> = {
+    "next-tab": "shortcut.nextTab",
+    "previous-tab": "shortcut.previousTab",
+    "select-last-tab": "shortcut.selectLastTab",
+    "new-game-tab": "shortcut.newGame",
+    "close-tab": "shortcut.closeTab",
+    "reopen-tab": "shortcut.reopenTab",
+    "open-settings": "shortcut.openSettings",
+    "open-home": "shortcut.openHome",
+    "reload-active-session": "shortcut.reload",
+    "toggle-fullscreen": "shortcut.fullscreen",
+    "open-command-palette": "shortcut.commandPalette",
+  };
+  return t(keys[action as keyof typeof keys]);
+}
+
 function GeneralSection() {
+  const { t } = useI18n();
   const settings = useSettingsStore();
   const update = useUpdateSetting();
   return (
     <section>
       <SectionHeader
-        eyebrow="Application"
-        title="Général"
-        description="Démarrage, restauration et comportement de fermeture."
+        eyebrow={t("settings.general.eyebrow")}
+        title={t("settings.section.general")}
+        description={t("settings.general.description")}
       />
       <SettingsCard>
         <SettingRow>
-          <SettingCopy label="Langue" description="Langue de l’interface" />
+          <SettingCopy
+            label={t("settings.language.label")}
+            description={t("settings.language.description")}
+          />
           <SettingSelect
-            label="Langue"
+            label={t("settings.language.label")}
             value={settings.language}
             onValueChange={(value) => void update("language", value as AppSettings["language"])}
           >
+            <SelectItem value="system">{t("settings.language.system")}</SelectItem>
             <SelectItem value="fr">Français</SelectItem>
             <SelectItem value="en">English</SelectItem>
           </SettingSelect>
         </SettingRow>
         <Toggle
-          label="Restaurer les onglets"
-          description="Rouvrir l’espace de travail du lancement précédent."
+          label={t("settings.restoreTabs.label")}
+          description={t("settings.restoreTabs.description")}
           checked={settings.restoreTabs}
           onChange={(value) => void update("restoreTabs", value)}
         />
         <Toggle
-          label="Confirmer la fermeture"
-          description="Demander avant de fermer une session encore connectée."
+          label={t("settings.confirmClose.label")}
+          description={t("settings.confirmClose.description")}
           checked={settings.confirmConnectedSessionClose}
           onChange={(value) => void update("confirmConnectedSessionClose", value)}
         />
         <Toggle
-          label="Rechercher les mises à jour"
-          description="Vérification automatique au démarrage."
+          label={t("settings.updates.label")}
+          description={t("settings.updates.description")}
           checked={settings.checkUpdatesAutomatically}
           onChange={(value) => void update("checkUpdatesAutomatically", value)}
         />
       </SettingsCard>
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle className="text-base">Changement automatique d’onglet</CardTitle>
+          <CardTitle className="text-base">{t("settings.autoSwitch.title")}</CardTitle>
           <p className="text-sm leading-5 text-muted-foreground">
-            Affiche immédiatement le compte qui demande votre attention.
+            {t("settings.autoSwitch.description")}
           </p>
         </CardHeader>
         <CardContent className="divide-y divide-border p-0">
           <Toggle
-            label="Début de votre tour"
-            description="Basculer sur le personnage qui doit jouer en combat."
+            label={t("settings.combatTurn.label")}
+            description={t("settings.combatTurn.description")}
             checked={settings.autoSwitchOnCombatTurn}
             onChange={(value) => void update("autoSwitchOnCombatTurn", value)}
           />
           <Toggle
-            label="Invitation de groupe"
-            description="Basculer sur le compte qui reçoit une invitation de groupe."
+            label={t("settings.partyInvitation.label")}
+            description={t("settings.partyInvitation.description")}
             checked={settings.autoSwitchOnPartyInvitation}
             onChange={(value) => void update("autoSwitchOnPartyInvitation", value)}
           />
           <Toggle
-            label="Combat du groupe"
-            description="Basculer lorsqu’un membre du groupe propose de rejoindre son combat."
+            label={t("settings.groupFight.label")}
+            description={t("settings.groupFight.description")}
             checked={settings.autoSwitchOnGroupFight}
             onChange={(value) => void update("autoSwitchOnGroupFight", value)}
           />
@@ -355,18 +400,19 @@ function GeneralSection() {
 }
 
 function AccountsSection() {
+  const { t } = useI18n();
   const accounts = useAccountStore((state) => state.accounts);
   const defaultId = useAccountStore((state) => state.defaultAccountId);
   return (
     <section>
       <SectionHeader
-        eyebrow="Profils"
-        title="Comptes"
-        description="Les métadonnées restent séparées des secrets de session."
+        eyebrow={t("settings.accounts.eyebrow")}
+        title={t("settings.section.accounts")}
+        description={t("settings.accounts.description")}
       />
       <SettingsCard>
         {accounts.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">Aucun profil enregistré.</div>
+          <div className="p-6 text-sm text-muted-foreground">{t("settings.accounts.empty")}</div>
         ) : (
           accounts.map((account) => (
             <SettingRow key={account.id}>
@@ -375,7 +421,9 @@ function AccountsSection() {
                 variant={defaultId === account.id ? "default" : "outline"}
                 onClick={() => void useAccountStore.getState().setDefaultAccount(account.id)}
               >
-                {defaultId === account.id ? "Par défaut" : "Définir par défaut"}
+                {defaultId === account.id
+                  ? t("settings.accounts.default")
+                  : t("settings.accounts.setDefault")}
               </Button>
             </SettingRow>
           ))
@@ -386,31 +434,35 @@ function AccountsSection() {
 }
 
 function InterfaceSection() {
+  const { t } = useI18n();
   const settings = useSettingsStore();
   const update = useUpdateSetting();
   return (
     <section>
       <SectionHeader
-        eyebrow="Apparence"
-        title="Interface"
-        description="Ajustez la densité pour la souris ou le tactile."
+        eyebrow={t("settings.interface.eyebrow")}
+        title={t("settings.section.interface")}
+        description={t("settings.interface.description")}
       />
       <SettingsCard>
         <SettingRow>
-          <SettingCopy label="Thème" description="Clair, sombre ou synchronisé avec le système." />
+          <SettingCopy
+            label={t("settings.theme.label")}
+            description={t("settings.theme.description")}
+          />
           <SettingSelect
-            label="Thème"
+            label={t("settings.theme.label")}
             value={settings.theme}
             onValueChange={(value) => void update("theme", value as AppSettings["theme"])}
           >
-            <SelectItem value="dark">Sombre</SelectItem>
-            <SelectItem value="light">Clair</SelectItem>
-            <SelectItem value="system">Système</SelectItem>
+            <SelectItem value="dark">{t("settings.theme.dark")}</SelectItem>
+            <SelectItem value="light">{t("settings.theme.light")}</SelectItem>
+            <SelectItem value="system">{t("settings.theme.system")}</SelectItem>
           </SettingSelect>
         </SettingRow>
         <SettingRow>
           <SettingCopy
-            label="Taille de l’interface"
+            label={t("settings.scale.label")}
             description={`${Math.round(settings.interfaceScale * 100)} %`}
           />
           <Slider
@@ -422,30 +474,30 @@ function InterfaceSection() {
             onValueChange={(values) =>
               void update("interfaceScale", values[0] ?? settings.interfaceScale)
             }
-            aria-label="Taille de l’interface"
+            aria-label={t("settings.scale.label")}
           />
         </SettingRow>
         <Toggle
-          label="Réduire les animations"
-          description="Neutralise les pulsations et les transitions décoratives."
+          label={t("settings.reduceMotion.label")}
+          description={t("settings.reduceMotion.description")}
           checked={settings.reduceMotion}
           onChange={(value) => void update("reduceMotion", value)}
         />
         <Toggle
-          label="Onglets compacts"
-          description="Réduit la largeur de la barre d’onglets."
+          label={t("settings.compactTabs.label")}
+          description={t("settings.compactTabs.description")}
           checked={settings.compactTabs}
           onChange={(value) => void update("compactTabs", value)}
         />
         <Toggle
-          label="Afficher les personnages"
-          description="Ajoute le personnage actif au libellé du compte."
+          label={t("settings.characterNames.label")}
+          description={t("settings.characterNames.description")}
           checked={settings.showCharacterNames}
           onChange={(value) => void update("showCharacterNames", value)}
         />
         <Toggle
-          label="Indicateurs de notification"
-          description="Affiche les alertes dans l’application et sur les onglets."
+          label={t("settings.notifications.label")}
+          description={t("settings.notifications.description")}
           checked={settings.showNotifications}
           onChange={(value) => void update("showNotifications", value)}
         />
@@ -455,6 +507,7 @@ function InterfaceSection() {
 }
 
 function ShortcutsSection() {
+  const { t } = useI18n();
   const bindings = useShortcutStore((state) => state.bindings);
   const [capturing, setCapturing] = useState<ShortcutAction>();
   const conflicts = findShortcutConflicts(bindings);
@@ -477,16 +530,16 @@ function ShortcutsSection() {
   return (
     <section>
       <SectionHeader
-        eyebrow="Navigation"
-        title="Raccourcis"
-        description="Actifs uniquement quand Twelia a le focus."
+        eyebrow={t("settings.shortcuts.eyebrow")}
+        title={t("settings.section.shortcuts")}
+        description={t("settings.shortcuts.description")}
       />
       {conflicts.size > 0 && (
         <Alert variant="warning" className="mb-4">
           <AlertTriangle />
-          <AlertTitle>Conflits détectés</AlertTitle>
+          <AlertTitle>{t("settings.shortcuts.conflicts")}</AlertTitle>
           <AlertDescription>
-            {conflicts.size} raccourci(s) en conflit. Les actions concernées sont désactivées.
+            {t("settings.shortcuts.conflictsDescription", { count: conflicts.size })}
           </AlertDescription>
         </Alert>
       )}
@@ -496,8 +549,8 @@ function ShortcutsSection() {
           return (
             <SettingRow key={binding.action} className={conflict ? "bg-destructive/5" : undefined}>
               <SettingCopy
-                label={binding.label}
-                description={conflict ? "Conflit de raccourci" : binding.action}
+                label={shortcutLabel(binding.action, t)}
+                description={conflict ? t("settings.shortcuts.conflict") : binding.action}
               />
               <div className="flex w-full items-center gap-2 sm:w-auto">
                 <Button
@@ -505,12 +558,14 @@ function ShortcutsSection() {
                   className="min-w-32 flex-1 font-mono sm:flex-none"
                   onClick={() => setCapturing(binding.action)}
                 >
-                  {capturing === binding.action ? "Appuyez…" : (binding.accelerator ?? "Désactivé")}
+                  {capturing === binding.action
+                    ? t("settings.shortcuts.press")
+                    : (binding.accelerator ?? t("settings.shortcuts.disabled"))}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Désactiver"
+                  aria-label={t("settings.shortcuts.disable")}
                   onClick={() => void useShortcutStore.getState().setBinding(binding.action, null)}
                 >
                   <Minus />
@@ -518,7 +573,7 @@ function ShortcutsSection() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Valeur par défaut"
+                  aria-label={t("settings.shortcuts.default")}
                   onClick={() => void useShortcutStore.getState().resetBinding(binding.action)}
                 >
                   <RotateCcw />
@@ -533,11 +588,13 @@ function ShortcutsSection() {
 }
 
 function ClientSection() {
+  const { t } = useI18n();
   const android = detectPlatform() === "android";
   const [result, setResult] = useState<string>();
   const [status, setStatus] = useState<ClientStatus>();
   const [progress, setProgress] = useState<ClientInstallProgress>();
   const [installing, setInstalling] = useState(false);
+  const progressMessageKey = progress ? CLIENT_PROGRESS_KEYS[progress.phase] : undefined;
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -556,7 +613,7 @@ function ClientSection() {
   }, []);
 
   const run = async (command: string) => {
-    if (!isTauriRuntime()) return setResult("Disponible dans l’application Tauri.");
+    if (!isTauriRuntime()) return setResult(t("settings.client.tauriOnly"));
     try {
       setResult(JSON.stringify(await invoke(command), null, 2));
     } catch (error) {
@@ -566,7 +623,7 @@ function ClientSection() {
   const install = async () => {
     setInstalling(true);
     setResult(undefined);
-    setProgress({ phase: "starting", message: "Préparation de l’installation…", percent: 0 });
+    setProgress({ phase: "starting", message: t("settings.client.preparing"), percent: 0 });
     try {
       const outcome = await installGameClient();
       setResult(JSON.stringify(outcome, null, 2));
@@ -581,19 +638,17 @@ function ClientSection() {
   return (
     <section>
       <SectionHeader
-        eyebrow="Fichiers officiels"
-        title="Client"
-        description="Téléchargement, vérification et lancement du client DOFUS Touch."
+        eyebrow={t("settings.client.eyebrow")}
+        title={t("settings.section.client")}
+        description={t("settings.client.description")}
       />
       <Alert variant="warning" className="mb-4">
         <AlertTriangle />
         <AlertTitle>
-          {android ? "Client Android officiel adapté" : "Client non officiel"}
+          {android ? t("settings.client.androidTitle") : t("settings.client.desktopTitle")}
         </AlertTitle>
         <AlertDescription>
-          {android
-            ? "Twelia conserve le comportement mobile du client et ajoute uniquement son serveur d’assets et le pont de connexion externe."
-            : "Le jeu sur PC via un client non officiel n’est pas pris en charge par Ankama et peut exposer le compte à une sanction. Twelia conserve les fichiers téléchargés intacts et crée une couche de compatibilité séparée."}
+          {android ? t("settings.client.androidWarning") : t("settings.client.desktopWarning")}
         </AlertDescription>
       </Alert>
       {status && (
@@ -601,13 +656,17 @@ function ClientSection() {
           <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <strong>
-                {status.installed ? `Version ${status.version}` : "Client non installé"}
+                {status.installed
+                  ? t("settings.client.version", { version: status.version ?? "—" })
+                  : t("settings.client.notInstalled")}
               </strong>
               <p className="truncate text-sm text-muted-foreground">{status.path}</p>
             </div>
             <Badge variant={status.integrity === "valid" ? "success" : "destructive"}>
               {status.integrity === "valid" ? <ShieldCheck /> : <AlertTriangle />}
-              {status.integrity === "valid" ? "Intègre" : "À installer ou réparer"}
+              {status.integrity === "valid"
+                ? t("settings.client.valid")
+                : t("settings.client.repairNeeded")}
             </Badge>
           </CardContent>
         </Card>
@@ -616,7 +675,7 @@ function ClientSection() {
         <Card className="mb-4">
           <CardContent className="space-y-3 p-4" aria-live="polite">
             <div className="flex justify-between gap-3 text-sm">
-              <strong>{progress.message}</strong>
+              <strong>{progressMessageKey ? t(progressMessageKey) : progress.message}</strong>
               <span className="text-primary">{progress.percent} %</span>
             </div>
             <Progress value={progress.percent} />
@@ -627,20 +686,20 @@ function ClientSection() {
         <Button disabled={installing} onClick={() => void install()}>
           <Download />
           {installing
-            ? "Installation en cours…"
+            ? t("settings.client.installing")
             : status?.installed
-              ? "Mettre à jour / réparer"
-              : "Télécharger et installer"}
+              ? t("settings.client.updateRepair")
+              : t("settings.client.downloadInstall")}
         </Button>
         <Button variant="outline" onClick={() => void run("get_client_status")}>
-          <Search /> Détecter
+          <Search /> {t("settings.client.detect")}
         </Button>
         <Button
           variant="outline"
           disabled={!status?.installed || installing}
           onClick={() => void run("verify_client_integrity")}
         >
-          <FileCheck2 /> Vérifier les fichiers
+          <FileCheck2 /> {t("settings.client.verify")}
         </Button>
       </div>
       {result && (
@@ -657,35 +716,45 @@ function ClientSection() {
 }
 
 function PerformanceSection() {
+  const { t } = useI18n();
   const settings = useSettingsStore();
   const update = useUpdateSetting();
   const attentionNeedsBackground = needsBackgroundGameActivity(settings);
   return (
     <section>
       <SectionHeader
-        eyebrow="Ressources"
-        title="Performances"
-        description="Les valeurs par défaut limitent fortement les sessions masquées."
+        eyebrow={t("settings.performance.eyebrow")}
+        title={t("settings.section.performance")}
+        description={t("settings.performance.description")}
       />
       <SettingsCard>
         <Toggle
-          label="Limiter le rendu en arrière-plan"
-          description="Réduit l’activité des onglets masqués."
+          label={t("settings.backgroundRendering.label")}
+          description={t("settings.backgroundRendering.description")}
           checked={settings.limitBackgroundRendering}
           onChange={(value) => void update("limitBackgroundRendering", value)}
         />
         <Toggle
-          label="Suspendre les onglets inactifs"
+          label={t("settings.muteInactive.label")}
+          description={t("settings.muteInactive.description")}
+          checked={settings.muteInactiveTabs}
+          onChange={(value) => void update("muteInactiveTabs", value)}
+        />
+        <Toggle
+          label={t("settings.suspendInactive.label")}
           description={
             attentionNeedsBackground
-              ? "Ignoré tant qu’une bascule automatique ou les notifications sont activées."
-              : "Recommandé sur Android et les appareils à mémoire limitée."
+              ? t("settings.suspendInactive.attention")
+              : t("settings.suspendInactive.description")
           }
           checked={settings.suspendInactiveTabs}
           onChange={(value) => void update("suspendInactiveTabs", value)}
         />
         <SettingRow>
-          <SettingCopy label="Sessions simultanées" description="Maximum local, de 1 à 12." />
+          <SettingCopy
+            label={t("settings.maxSessions.label")}
+            description={t("settings.maxSessions.description")}
+          />
           <Input
             className="w-full sm:w-52"
             type="number"
@@ -693,29 +762,29 @@ function PerformanceSection() {
             max={12}
             value={settings.maxSessions}
             onChange={(event) => void update("maxSessions", Number(event.target.value))}
-            aria-label="Sessions simultanées"
+            aria-label={t("settings.maxSessions.label")}
           />
         </SettingRow>
         <SettingRow>
           <SettingCopy
-            label="Qualité de rendu"
-            description="Adaptée automatiquement en arrière-plan."
+            label={t("settings.renderQuality.label")}
+            description={t("settings.renderQuality.description")}
           />
           <SettingSelect
-            label="Qualité de rendu"
+            label={t("settings.renderQuality.label")}
             value={settings.renderQuality}
             onValueChange={(value) =>
               void update("renderQuality", value as AppSettings["renderQuality"])
             }
           >
-            <SelectItem value="low">Économie</SelectItem>
-            <SelectItem value="balanced">Équilibrée</SelectItem>
-            <SelectItem value="high">Élevée</SelectItem>
+            <SelectItem value="low">{t("settings.renderQuality.low")}</SelectItem>
+            <SelectItem value="balanced">{t("settings.renderQuality.balanced")}</SelectItem>
+            <SelectItem value="high">{t("settings.renderQuality.high")}</SelectItem>
           </SettingSelect>
         </SettingRow>
         <Toggle
-          label="Mode diagnostic"
-          description="Désactivé par défaut en production. Les secrets restent masqués."
+          label={t("settings.debug.label")}
+          description={t("settings.debug.description")}
           checked={settings.debugMode}
           onChange={(value) => void update("debugMode", value)}
         />
@@ -725,6 +794,7 @@ function PerformanceSection() {
 }
 
 function LogsSection() {
+  const { t } = useI18n();
   const debug = useSettingsStore((state) => state.debugMode);
   const [events, setEvents] = useState<DiagnosticEvent[]>(diagnosticLogger.getEvents());
   const [level, setLevel] = useState<LogLevel | "ALL">("ALL");
@@ -764,26 +834,24 @@ function LogsSection() {
   return (
     <section>
       <SectionHeader
-        eyebrow="Diagnostic"
-        title="Journaux"
-        description="Événements nettoyés et corrélés, sans contenu de session."
+        eyebrow={t("settings.logs.eyebrow")}
+        title={t("settings.section.logs")}
+        description={t("settings.logs.description")}
       />
       {!debug && (
         <Alert variant="warning" className="mb-4">
           <AlertTriangle />
-          <AlertTitle>Affichage désactivé</AlertTitle>
-          <AlertDescription>
-            Activez le mode diagnostic dans Performances pour afficher les détails techniques.
-          </AlertDescription>
+          <AlertTitle>{t("settings.logs.disabledTitle")}</AlertTitle>
+          <AlertDescription>{t("settings.logs.disabledDescription")}</AlertDescription>
         </Alert>
       )}
       <div className="mb-3 flex flex-wrap gap-2">
         <SettingSelect
-          label="Niveau des journaux"
+          label={t("settings.logs.level")}
           value={level}
           onValueChange={(value) => setLevel(value as LogLevel | "ALL")}
         >
-          <SelectItem value="ALL">Tous les niveaux</SelectItem>
+          <SelectItem value="ALL">{t("settings.logs.all")}</SelectItem>
           {["TRACE", "DEBUG", "INFO", "WARN", "ERROR"].map((item) => (
             <SelectItem key={item} value={item}>
               {item}
@@ -791,18 +859,20 @@ function LogsSection() {
           ))}
         </SettingSelect>
         <Button variant="outline" onClick={exportReport}>
-          <Download /> Exporter le rapport
+          <Download /> {t("settings.logs.export")}
         </Button>
         <Button variant="outline" onClick={() => diagnosticLogger.clear()}>
-          <Trash2 /> Vider
+          <Trash2 /> {t("settings.logs.clear")}
         </Button>
       </div>
       <Card aria-live="polite" className="overflow-hidden">
         <CardContent className="max-h-[34rem] overflow-auto p-0">
           {!debug ? (
-            <p className="p-5 text-sm text-muted-foreground">Affichage détaillé désactivé.</p>
+            <p className="p-5 text-sm text-muted-foreground">
+              {t("settings.logs.detailsDisabled")}
+            </p>
           ) : visible.length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">Aucun événement.</p>
+            <p className="p-5 text-sm text-muted-foreground">{t("settings.logs.empty")}</p>
           ) : (
             visible
               .slice()
@@ -841,12 +911,13 @@ function LogsSection() {
 }
 
 function AboutSection() {
+  const { t } = useI18n();
   return (
     <section>
       <SectionHeader
-        eyebrow="Version 1.0.0"
-        title="À propos de Twelia"
-        description="Client multiplateforme indépendant construit avec Tauri 2."
+        eyebrow={t("settings.about.eyebrow")}
+        title={t("settings.about.title")}
+        description={t("settings.about.description")}
       />
       <Card className="max-w-2xl">
         <CardHeader>
@@ -856,17 +927,10 @@ function AboutSection() {
           <CardTitle className="text-2xl">Twelia</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 leading-7 text-muted-foreground">
-          <p>Twelia est un projet indépendant et non affilié à Ankama.</p>
-          <p>
-            Twelia cherche à utiliser les fichiers officiels sans les modifier, mais son utilisation
-            n’est pas officiellement approuvée et l’absence de sanction ou de bannissement ne peut
-            pas être garantie.
-          </p>
+          <p>{t("settings.about.independent")}</p>
+          <p>{t("settings.about.risk")}</p>
           <Separator />
-          <p>
-            Aucun bot, autoclic, macro, diffusion d’action, injection ou modification du trafic
-            n’est inclus.
-          </p>
+          <p>{t("settings.about.noAutomation")}</p>
         </CardContent>
       </Card>
     </section>

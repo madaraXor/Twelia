@@ -20,6 +20,10 @@ use tauri::{
     webview::{NewWindowResponse, WebviewBuilder},
 };
 use uuid::Uuid;
+#[cfg(target_os = "windows")]
+use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
+#[cfg(target_os = "windows")]
+use windows_core::Interface;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -354,6 +358,40 @@ impl SessionManager {
     }
 
     #[cfg(desktop)]
+    pub fn set_muted(
+        &self,
+        app: &AppHandle,
+        session_id: &str,
+        muted: bool,
+    ) -> Result<(), AppError> {
+        let webview = app
+            .get_webview(&webview_label(session_id))
+            .ok_or_else(|| AppError::Runtime("vue du jeu introuvable".into()))?;
+
+        #[cfg(target_os = "windows")]
+        webview
+            .with_webview(move |platform_webview| {
+                let result = unsafe {
+                    platform_webview
+                        .controller()
+                        .CoreWebView2()
+                        .and_then(|core| core.cast::<ICoreWebView2_8>())
+                        .and_then(|audio| audio.SetIsMuted(muted))
+                };
+                if let Err(error) = result {
+                    log::warn!("impossible de régler le son natif de la vue du jeu: {error}");
+                }
+            })
+            .map_err(runtime_platform)?;
+
+        webview
+            .eval(format!(
+                "if(typeof window.__TWELIA_SET_MUTED__==='function'){{window.__TWELIA_SET_MUTED__({muted});}}"
+            ))
+            .map_err(runtime_platform)
+    }
+
+    #[cfg(desktop)]
     pub fn configure_shortcuts(
         &self,
         app: &AppHandle,
@@ -471,6 +509,18 @@ impl SessionManager {
     }
 
     #[cfg(mobile)]
+    pub fn set_muted(
+        &self,
+        _app: &AppHandle,
+        session_id: &str,
+        _muted: bool,
+    ) -> Result<(), AppError> {
+        // Android sessions live in front-end iframes. GameTab forwards the same
+        // mute state through the embedded host bridge without suspending the game.
+        self.get(session_id).map(|_| ())
+    }
+
+    #[cfg(mobile)]
     pub fn configure_shortcuts(
         &self,
         _app: &AppHandle,
@@ -574,6 +624,72 @@ fn webview_label(session_id: &str) -> String {
 
 #[cfg(desktop)]
 const GAME_EVENT_BRIDGE_SCRIPT: &str = r#"
+(function installTweliaAudioBridge() {
+  if (window.__TWELIA_AUDIO_BRIDGE__) return;
+  window.__TWELIA_AUDIO_BRIDGE__ = true;
+  var muted = false;
+  var howlerWasMuted;
+  var mediaMuteStates = new WeakMap();
+  var webAudioGains = [];
+  var webAudioGainByContext = new WeakMap();
+  var originalAudioConnect = window.AudioNode && window.AudioNode.prototype.connect;
+
+  function masterGainFor(context) {
+    var existing = webAudioGainByContext.get(context);
+    if (existing) return existing;
+    var master = context.createGain();
+    master.gain.value = muted ? 0 : 1;
+    webAudioGainByContext.set(context, master);
+    webAudioGains.push(master);
+    originalAudioConnect.call(master, context.destination);
+    return master;
+  }
+
+  if (originalAudioConnect) {
+    window.AudioNode.prototype.connect = function (destination, output, input) {
+      if (this.context && destination === this.context.destination) {
+        var master = masterGainFor(this.context);
+        if (arguments.length >= 3) return originalAudioConnect.call(this, master, output, 0);
+        if (arguments.length >= 2) return originalAudioConnect.call(this, master, output);
+        return originalAudioConnect.call(this, master);
+      }
+      return originalAudioConnect.apply(this, arguments);
+    };
+  }
+
+  function applyMutedState() {
+    webAudioGains.forEach(function (master) {
+      master.gain.value = muted ? 0 : 1;
+    });
+    if (window.Howler && typeof window.Howler.mute === "function") {
+      if (muted) {
+        if (howlerWasMuted === undefined) howlerWasMuted = Boolean(window.Howler._muted);
+        window.Howler.mute(true);
+      } else if (howlerWasMuted !== undefined) {
+        window.Howler.mute(howlerWasMuted);
+        howlerWasMuted = undefined;
+      }
+    }
+    document.querySelectorAll("audio,video").forEach(function (media) {
+      if (muted) {
+        if (!mediaMuteStates.has(media)) mediaMuteStates.set(media, media.muted);
+        media.muted = true;
+      } else if (mediaMuteStates.has(media)) {
+        media.muted = mediaMuteStates.get(media);
+        mediaMuteStates.delete(media);
+      }
+    });
+  }
+
+  window.__TWELIA_SET_MUTED__ = function (nextMuted) {
+    muted = Boolean(nextMuted);
+    applyMutedState();
+  };
+
+  new MutationObserver(applyMutedState).observe(document, { childList: true, subtree: true });
+  window.setInterval(applyMutedState, 1000);
+})();
+
 (function installTweliaAttentionBridge() {
   if (window.__TWELIA_ATTENTION_BRIDGE__) return;
   window.__TWELIA_ATTENTION_BRIDGE__ = true;
@@ -737,5 +853,14 @@ mod tests {
             None
         );
         assert_eq!(game_shortcut_accelerator("__TWELIA_SHORTCUT__::1"), None);
+    }
+
+    #[test]
+    fn audio_bridge_mutes_output_without_suspending_the_game() {
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("window.Howler.mute(true)"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("mediaMuteStates.get(media)"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("master.gain.value = muted ? 0 : 1"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("window.AudioNode.prototype.connect"));
+        assert!(!GAME_EVENT_BRIDGE_SCRIPT.contains("AudioContext.suspend"));
     }
 }

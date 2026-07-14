@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { AccountProfile } from "../accountTypes";
 import { maskLoginHint } from "../accountTypes";
+import { useI18n } from "../../i18n/i18n";
 
 type Props = {
   account: AccountProfile;
@@ -20,13 +21,6 @@ type Props = {
   onReconnect: () => void;
   onLogout: () => void;
   onDelete: () => void;
-};
-
-const statusLabels: Record<AccountProfile["sessionStatus"], string> = {
-  unknown: "À vérifier",
-  valid: "Session valide",
-  expired: "Session expirée",
-  "logged-out": "Déconnecté",
 };
 
 const statusVariants: Record<
@@ -55,6 +49,13 @@ export function AccountCard({
   onLogout,
   onDelete,
 }: Props) {
+  const { locale, t } = useI18n();
+  const statusLabels: Record<AccountProfile["sessionStatus"], string> = {
+    unknown: t("account.status.unknown"),
+    valid: t("account.status.valid"),
+    expired: t("account.status.expired"),
+    "logged-out": t("account.status.loggedOut"),
+  };
   return (
     <Card className="flex min-w-0 flex-col overflow-hidden transition-[border-color,box-shadow] hover:border-primary/35 hover:shadow-[0_12px_30px_-22px_rgba(231,178,76,.45)]">
       <CardHeader className="flex-row items-start gap-3 space-y-0 p-[18px] pb-4">
@@ -66,7 +67,7 @@ export function AccountCard({
         <div className="min-w-0 flex-1">
           <CardTitle className="truncate text-base">{account.displayName}</CardTitle>
           <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-            {maskLoginHint(account.loginHint) ?? "Aucun identifiant renseigné"}
+            {maskLoginHint(account.loginHint) ?? t("account.noLogin")}
           </p>
         </div>
         <Badge className="shrink-0" variant={statusVariants[account.sessionStatus]}>
@@ -74,38 +75,42 @@ export function AccountCard({
         </Badge>
       </CardHeader>
       <CardContent className="flex-1 px-[18px] pb-4 text-[13px] text-muted-foreground">
-        {account.preferredCharacter ?? account.preferredServer ?? "Profil prêt"}
+        {account.preferredCharacter ?? account.preferredServer ?? t("account.ready")}
         {account.lastUsedAt
-          ? ` · utilisé ${new Intl.DateTimeFormat("fr", { dateStyle: "medium" }).format(new Date(account.lastUsedAt))}`
+          ? ` · ${t("account.lastUsed", {
+              date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+                new Date(account.lastUsedAt),
+              ),
+            })}`
           : ""}
       </CardContent>
       <CardFooter className="gap-2 px-[18px] pb-[18px]">
         <Button className="flex-1" onClick={onPlay}>
-          <Play /> {active ? "Afficher" : "Jouer"}
+          <Play /> {active ? t("account.show") : t("account.play")}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              aria-label={`Actions pour ${account.displayName}`}
+              aria-label={t("account.actions", { name: account.displayName })}
             >
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={onEdit}>
-              <Pencil /> Modifier
+              <Pencil /> {t("account.edit")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onReconnect}>
-              <RefreshCw /> Se reconnecter
+              <RefreshCw /> {t("account.reconnect")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onLogout}>
-              <LogOut /> Déconnecter
+              <LogOut /> {t("account.logout")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-danger focus:text-danger" onSelect={onDelete}>
-              <Trash2 /> Supprimer les données locales
+              <Trash2 /> {t("account.deleteLocal")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

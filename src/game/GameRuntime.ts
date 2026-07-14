@@ -25,6 +25,10 @@ export async function setGameSessionVisibility(sessionId: string, visible: boole
   if (visible) window.dispatchEvent(new Event("resize"));
 }
 
+export async function setGameSessionMuted(sessionId: string, muted: boolean): Promise<void> {
+  if (isTauriRuntime()) await invoke("set_game_session_muted", { sessionId, muted });
+}
+
 export async function keepGameSessionActive(sessionId: string): Promise<void> {
   if (isTauriRuntime()) await invoke("keep_game_session_active", { sessionId });
 }

@@ -30,11 +30,13 @@ import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
 import { useGameSessionStore } from "../game/GameSessionManager";
 import { setGameSessionVisibility } from "../game/GameRuntime";
+import { useI18n } from "../i18n/i18n";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "./tabStore";
 import type { WorkspaceTab } from "./tabTypes";
 
 export function TabBar() {
+  const { t } = useI18n();
   const tabs = useTabStore((state) => state.tabs);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const accounts = useAccountStore((state) => state.accounts);
@@ -61,9 +63,10 @@ export function TabBar() {
 
   const labelFor = (tab: WorkspaceTab) => {
     if (tab.type === "home") return "Twelia";
-    if (tab.type === "settings") return "Paramètres";
+    if (tab.type === "settings") return t("common.settings");
     return (
-      accounts.find((account) => account.id === tab.accountId)?.displayName ?? "Compte supprimé"
+      accounts.find((account) => account.id === tab.accountId)?.displayName ??
+      t("tabs.deletedAccount")
     );
   };
 
@@ -103,16 +106,16 @@ export function TabBar() {
         <>
           <ContextMenuItem onSelect={() => pin(tab)}>
             {tab.pinned ? <PinOff /> : <Pin />}
-            {tab.pinned ? "Désépingler" : "Épingler"}
+            {tab.pinned ? t("tabs.unpin") : t("tabs.pin")}
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => reload(tab)}>
-            <RefreshCw /> Recharger la session
+            <RefreshCw /> {t("tabs.reload")}
           </ContextMenuItem>
           <ContextMenuSeparator />
         </>
       )}
       <ContextMenuItem onSelect={() => requestClose(tab)}>
-        <X /> Fermer
+        <X /> {t("common.close")}
       </ContextMenuItem>
     </>
   );
@@ -126,7 +129,7 @@ export function TabBar() {
       >
         <nav
           className="relative z-20 shrink-0 border-b border-border bg-chrome"
-          aria-label="Onglets principaux"
+          aria-label={t("tabs.main")}
         >
           <TabsList className="flex h-[50px] w-full justify-start gap-1.5 overflow-x-auto overflow-y-hidden rounded-none bg-transparent px-3 text-muted-foreground">
             {tabs.map((tab) => {
@@ -183,7 +186,10 @@ export function TabBar() {
                         )}
                         <span className="truncate">{labelFor(tab)}</span>
                         {tab.type === "game" && tab.pinned && (
-                          <Pin className="size-3 shrink-0 text-primary" aria-label="Épinglé" />
+                          <Pin
+                            className="size-3 shrink-0 text-primary"
+                            aria-label={t("tabs.pinned")}
+                          />
                         )}
                       </TabsTrigger>
 
@@ -199,7 +205,7 @@ export function TabBar() {
                               className={cn(
                                 "mr-0.5 size-7 shrink-0 rounded-full opacity-60 shadow-none hover:bg-black/10 hover:opacity-100",
                               )}
-                              aria-label={`Actions pour ${labelFor(tab)}`}
+                              aria-label={t("tabs.actions", { name: labelFor(tab) })}
                             >
                               <MoreHorizontal />
                             </Button>
@@ -207,14 +213,14 @@ export function TabBar() {
                           <DropdownMenuContent align="start" sideOffset={8}>
                             <DropdownMenuItem onSelect={() => pin(tab)}>
                               {tab.pinned ? <PinOff /> : <Pin />}
-                              {tab.pinned ? "Désépingler" : "Épingler"}
+                              {tab.pinned ? t("tabs.unpin") : t("tabs.pin")}
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => reload(tab)}>
-                              <RefreshCw /> Recharger la session
+                              <RefreshCw /> {t("tabs.reload")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onSelect={() => requestClose(tab)}>
-                              <X /> Fermer
+                              <X /> {t("common.close")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -227,7 +233,7 @@ export function TabBar() {
                           className={cn(
                             "mr-1 size-7 shrink-0 rounded-full opacity-60 shadow-none hover:bg-black/10 hover:opacity-100",
                           )}
-                          aria-label={`Fermer ${labelFor(tab)}`}
+                          aria-label={t("tabs.closeNamed", { name: labelFor(tab) })}
                           onClick={() => requestClose(tab)}
                         >
                           <X />
@@ -245,7 +251,7 @@ export function TabBar() {
               variant="ghost"
               size="icon"
               className="ml-0.5 size-8 shrink-0 rounded-full border border-border bg-transparent text-muted-foreground shadow-none hover:border-primary/35 hover:text-foreground"
-              aria-label="Nouvelle session"
+              aria-label={t("tabs.newSession")}
               onClick={() => useTabStore.getState().selectTab("home")}
             >
               <Plus />
@@ -260,15 +266,17 @@ export function TabBar() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Fermer la session ?</AlertDialogTitle>
+            <AlertDialogTitle>{t("tabs.closeTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              La session « {pendingClose ? labelFor(pendingClose) : ""} » est encore connectée.
+              {t("tabs.closeDescription", {
+                name: pendingClose ? labelFor(pendingClose) : "",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={() => pendingClose && void close(pendingClose)}>
-              Fermer
+              {t("common.close")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

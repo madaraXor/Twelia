@@ -22,7 +22,7 @@ const PLAY_STORE_URL: &str =
     "https://play.google.com/store/apps/details?id=com.ankama.dofustouch&hl=fr&gl=FR";
 const MAX_MANIFEST_SIZE: usize = 10 * 1024 * 1024;
 const MAX_FILE_SIZE: u64 = 512 * 1024 * 1024;
-pub const COMPATIBILITY_VERSION: u32 = 7;
+pub const COMPATIBILITY_VERSION: u32 = 9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CompatibilityTarget {
@@ -696,6 +696,66 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
     }}, payload || {{}}), "*");
   }}
 
+  var muted = false;
+  var howlerWasMuted;
+  var mediaMuteStates = new WeakMap();
+  var webAudioGains = [];
+  var webAudioGainByContext = new WeakMap();
+  var originalAudioConnect = window.AudioNode && window.AudioNode.prototype.connect;
+
+  function masterGainFor(context) {{
+    var existing = webAudioGainByContext.get(context);
+    if (existing) return existing;
+    var master = context.createGain();
+    master.gain.value = muted ? 0 : 1;
+    webAudioGainByContext.set(context, master);
+    webAudioGains.push(master);
+    originalAudioConnect.call(master, context.destination);
+    return master;
+  }}
+
+  if (originalAudioConnect) {{
+    window.AudioNode.prototype.connect = function (destination, output, input) {{
+      if (this.context && destination === this.context.destination) {{
+        var master = masterGainFor(this.context);
+        if (arguments.length >= 3) return originalAudioConnect.call(this, master, output, 0);
+        if (arguments.length >= 2) return originalAudioConnect.call(this, master, output);
+        return originalAudioConnect.call(this, master);
+      }}
+      return originalAudioConnect.apply(this, arguments);
+    }};
+  }}
+
+  function applyMutedState() {{
+    webAudioGains.forEach(function (master) {{
+      master.gain.value = muted ? 0 : 1;
+    }});
+    if (window.Howler && typeof window.Howler.mute === "function") {{
+      if (muted) {{
+        if (howlerWasMuted === undefined) howlerWasMuted = Boolean(window.Howler._muted);
+        window.Howler.mute(true);
+      }} else if (howlerWasMuted !== undefined) {{
+        window.Howler.mute(howlerWasMuted);
+        howlerWasMuted = undefined;
+      }}
+    }}
+    document.querySelectorAll("audio,video").forEach(function (media) {{
+      if (muted) {{
+        if (!mediaMuteStates.has(media)) mediaMuteStates.set(media, media.muted);
+        media.muted = true;
+      }} else if (mediaMuteStates.has(media)) {{
+        media.muted = mediaMuteStates.get(media);
+        mediaMuteStates.delete(media);
+      }}
+    }});
+  }}
+  window.__TWELIA_SET_MUTED__ = function (nextMuted) {{
+    muted = Boolean(nextMuted);
+    applyMutedState();
+  }};
+  new MutationObserver(applyMutedState).observe(document, {{ childList: true, subtree: true }});
+  window.setInterval(applyMutedState, 1000);
+
   window.open = function (url, target, features) {{
     var value = String(url || "");
     if (!/^https?:\/\//i.test(value)) return originalOpen(url, target, features);
@@ -715,7 +775,12 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
   window.addEventListener("message", function (event) {{
     if (event.source !== window.parent) return;
     var data = event.data;
-    if (!data || data.source !== "twelia-host" || data.type !== "oauth-callback") return;
+    if (!data || data.source !== "twelia-host") return;
+    if (data.type === "set-muted") {{
+      window.__TWELIA_SET_MUTED__(data.muted);
+      return;
+    }}
+    if (data.type !== "oauth-callback") return;
     if (popup) popup.closed = true;
     if (typeof window.__TWELIA_OAUTH_CALLBACK__ === "function") {{
       window.__TWELIA_OAUTH_CALLBACK__(data.payload);
@@ -988,6 +1053,12 @@ mod tests {
             "width=1280, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
         ));
         assert!(!bootstrap.contains("window.process ="));
+        assert!(bootstrap.contains("data.type === \"set-muted\""));
+        assert!(bootstrap.contains("window.Howler.mute(true)"));
+        assert!(bootstrap.contains("mediaMuteStates.get(media)"));
+        assert!(bootstrap.contains("master.gain.value = muted ? 0 : 1"));
+        assert!(bootstrap.contains("window.AudioNode.prototype.connect"));
+        assert!(!bootstrap.contains("AudioContext.suspend"));
     }
 
     #[test]

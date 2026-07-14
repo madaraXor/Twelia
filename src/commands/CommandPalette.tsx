@@ -12,18 +12,23 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAccountStore } from "../accounts/accountStore";
 import { useGameSessionStore } from "../game/GameSessionManager";
+import { useI18n } from "../i18n/i18n";
+import { SETTING_SEARCH_ENTRIES } from "../settings/settingsCatalog";
 import { useTabStore } from "../tabs/tabStore";
 import { useCommandUiStore } from "./commandStore";
+import { commandFilter } from "./search";
 
 type CommandEntry = {
   id: string;
   label: string;
   group: string;
   icon: typeof Home;
+  keywords?: string[];
   run: () => void;
 };
 
 export function CommandPalette() {
+  const { t } = useI18n();
   const open = useCommandUiStore((state) => state.paletteOpen);
   const close = useCommandUiStore((state) => state.closePalette);
   const accounts = useAccountStore((state) => state.accounts);
@@ -33,36 +38,44 @@ export function CommandPalette() {
     () => [
       ...accounts.map((account) => ({
         id: `account-${account.id}`,
-        label: `Ouvrir ${account.displayName}`,
-        group: "Comptes",
+        label: t("command.openAccount", { name: account.displayName }),
+        group: t("command.group.accounts"),
         icon: Gamepad2,
         run: () => useTabStore.getState().openGame(account.id),
       })),
       ...tabs.map((tab) => ({
         id: `tab-${tab.id}`,
-        label: `Afficher ${tab.type === "home" ? "Twelia" : tab.type === "settings" ? "Paramètres" : (accounts.find((account) => account.id === tab.accountId)?.displayName ?? "session")}`,
-        group: "Onglets",
+        label: t("command.showTab", {
+          name:
+            tab.type === "home"
+              ? "Twelia"
+              : tab.type === "settings"
+                ? t("common.settings")
+                : (accounts.find((account) => account.id === tab.accountId)?.displayName ??
+                  t("common.session")),
+        }),
+        group: t("command.group.tabs"),
         icon: tab.type === "game" ? Gamepad2 : tab.type === "settings" ? Settings : Home,
         run: () => useTabStore.getState().selectTab(tab.id),
       })),
       {
         id: "settings",
-        label: "Ouvrir les paramètres",
-        group: "Navigation",
+        label: t("command.openSettings"),
+        group: t("command.group.navigation"),
         icon: Settings,
         run: () => useTabStore.getState().openSettings(),
       },
       {
         id: "home",
-        label: "Revenir à Twelia",
-        group: "Navigation",
+        label: t("command.openHome"),
+        group: t("command.group.navigation"),
         icon: Home,
         run: () => useTabStore.getState().selectTab("home"),
       },
       {
         id: "reload",
-        label: "Recharger la session active",
-        group: "Session",
+        label: t("command.reload"),
+        group: t("command.group.session"),
         icon: RotateCw,
         run: () => {
           const active = useTabStore
@@ -77,20 +90,31 @@ export function CommandPalette() {
       },
       {
         id: "verify",
-        label: "Vérifier les fichiers du client",
-        group: "Client",
+        label: t("command.verify"),
+        group: t("command.group.client"),
         icon: FileSearch,
         run: () => useTabStore.getState().openSettings("client"),
       },
       {
         id: "logs",
-        label: "Ouvrir le diagnostic",
-        group: "Diagnostic",
+        label: t("command.logs"),
+        group: t("command.group.diagnostic"),
         icon: TerminalSquare,
         run: () => useTabStore.getState().openSettings("logs"),
       },
+      ...SETTING_SEARCH_ENTRIES.map((setting) => {
+        const label = t(setting.labelKey);
+        return {
+          id: `setting-${setting.id}`,
+          label: t("command.openSetting", { name: label }),
+          group: t("command.group.settings"),
+          icon: Settings,
+          keywords: [label, setting.keywords],
+          run: () => useTabStore.getState().openSettings(setting.section),
+        };
+      }),
     ],
-    [accounts, tabs],
+    [accounts, t, tabs],
   );
 
   const groups = [...new Set(commands.map((command) => command.group))];
@@ -102,14 +126,12 @@ export function CommandPalette() {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
       <DialogContent className="top-[13vh] max-w-[560px] translate-y-0 overflow-hidden p-0 [&>button]:hidden">
-        <DialogTitle className="sr-only">Palette de commandes</DialogTitle>
-        <DialogDescription className="sr-only">
-          Rechercher une commande, un compte ou un onglet.
-        </DialogDescription>
-        <Command>
-          <CommandInput autoFocus placeholder="Rechercher une commande ou un compte…" />
+        <DialogTitle className="sr-only">{t("command.title")}</DialogTitle>
+        <DialogDescription className="sr-only">{t("command.description")}</DialogDescription>
+        <Command filter={commandFilter}>
+          <CommandInput autoFocus placeholder={t("command.placeholder")} />
           <CommandList>
-            <CommandEmpty>Aucune commande trouvée.</CommandEmpty>
+            <CommandEmpty>{t("command.empty")}</CommandEmpty>
             {groups.map((group, index) => (
               <div key={group}>
                 {index > 0 && <CommandSeparator />}
@@ -121,7 +143,8 @@ export function CommandPalette() {
                       return (
                         <CommandItem
                           key={command.id}
-                          value={`${command.label} ${command.group}`}
+                          value={`${command.id} ${command.label} ${command.group}`}
+                          keywords={command.keywords}
                           onSelect={() => run(command)}
                         >
                           <Icon className="text-muted-foreground" />
@@ -137,9 +160,9 @@ export function CommandPalette() {
             ))}
           </CommandList>
           <footer className="flex gap-4 border-t border-border px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-            <span>↑↓ naviguer</span>
-            <span>Entrée exécuter</span>
-            <span>Échap fermer</span>
+            <span>{t("command.footer.navigate")}</span>
+            <span>{t("command.footer.run")}</span>
+            <span>{t("command.footer.close")}</span>
           </footer>
         </Command>
       </DialogContent>
