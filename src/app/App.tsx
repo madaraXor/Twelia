@@ -23,6 +23,7 @@ import { TabContent } from "../tabs/TabContent";
 import { MobileTabMenu } from "../tabs/MobileTabMenu";
 import { useTabStore } from "../tabs/tabStore";
 import { startup } from "./startup";
+import { DesktopTitleBar } from "./DesktopTitleBar";
 
 export function App() {
   useMobileGameDeepLinks();
@@ -32,6 +33,8 @@ export function App() {
   const activeTabId = useTabStore((state) => state.activeTabId);
   const sessions = useGameSessionStore((state) => state.sessions);
   const interfaceScale = useSettingsStore((state) => state.interfaceScale);
+  const theme = useSettingsStore((state) => state.theme);
+  const reduceMotion = useSettingsStore((state) => state.reduceMotion);
   const suspendInactiveTabs = useSettingsStore((state) => state.suspendInactiveTabs);
   const keepGamesActive = useSettingsStore(needsBackgroundGameActivity);
 
@@ -44,6 +47,21 @@ export function App() {
         setReady(true);
       });
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const applyTheme = () => {
+      root.dataset.theme = theme === "system" ? (media.matches ? "light" : "dark") : theme;
+    };
+    applyTheme();
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.reduceMotion = String(reduceMotion);
+  }, [reduceMotion]);
 
   useEffect(() => {
     if (!ready) return;
@@ -153,6 +171,7 @@ export function App() {
   return (
     <ShortcutProvider>
       <div className="app-shell" style={{ fontSize: `${interfaceScale}rem` }}>
+        {!mobile && <DesktopTitleBar />}
         {mobile ? <MobileTabMenu /> : <TabBar />}
         {startupError && (
           <Alert variant="destructive" className="z-30 rounded-none border-x-0 border-t-0 py-2">

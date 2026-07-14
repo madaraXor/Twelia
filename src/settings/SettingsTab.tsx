@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   AppWindow,
@@ -69,56 +69,116 @@ const sections: Array<[SettingsSection, string, typeof AppWindow]> = [
   ["about", "À propos", Info],
 ];
 
+const sectionSearchTerms: Record<SettingsSection, string> = {
+  general:
+    "général langue démarrage restauration fermeture mise à jour changement automatique combat invitation",
+  accounts: "comptes profils défaut session données",
+  interface:
+    "interface apparence thème clair sombre système taille échelle onglets notifications animations",
+  shortcuts: "raccourcis clavier commandes touches",
+  client: "client installation téléchargement intégrité réparer fichiers",
+  performance: "performances mémoire arrière-plan sessions rendu diagnostic",
+  logs: "journaux diagnostic événements export rapport",
+  about: "à propos version licence ankama sécurité",
+};
+
 export function SettingsTab({ initialSection = "general" }: { initialSection?: SettingsSection }) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const [query, setQuery] = useState("");
+  const contentRef = useRef<HTMLDivElement>(null);
+  const visibleSections = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("fr");
+    if (!normalized) return sections;
+    return sections.filter(
+      ([id, label]) =>
+        label.toLocaleLowerCase("fr").includes(normalized) ||
+        sectionSearchTerms[id].includes(normalized),
+    );
+  }, [query]);
+  const activeSection = visibleSections.some(([id]) => id === section)
+    ? section
+    : (visibleSections[0]?.[0] ?? section);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeSection]);
+
   return (
     <Tabs
-      value={section}
+      value={activeSection}
       onValueChange={(value) => setSection(value as SettingsSection)}
-      className="grid min-h-full grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)]"
+      className="grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
     >
-      <aside className="border-b border-border bg-card/45 p-3 lg:border-b-0 lg:border-r lg:p-5">
-        <div className="hidden px-2 pb-6 lg:block">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Twelia</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Paramètres</h1>
+      <header className="shrink-0 border-b border-border bg-background px-5 py-6 sm:px-8">
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
+          Configuration
+        </p>
+        <h1 className="mt-2 font-serif text-4xl font-semibold leading-none tracking-[-0.01em]">
+          Paramètres
+        </h1>
+      </header>
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)] lg:grid-rows-1">
+        <aside
+          data-testid="settings-navigation"
+          className="min-w-0 shrink-0 border-b border-border bg-chrome/45 p-4 lg:h-full lg:border-b-0 lg:border-r lg:p-5"
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Rechercher un réglage…"
+              className="h-10 bg-card pl-9 text-[13px]"
+              aria-label="Rechercher dans les paramètres"
+            />
+          </div>
+          <TabsList className="mt-3 flex h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 lg:grid">
+            {visibleSections.map(([id, label, Icon]) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                className="h-10 shrink-0 justify-start gap-2.5 rounded-[9px] px-3 text-[13px] data-[state=active]:bg-surface-elevated data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none lg:w-full"
+              >
+                <Icon className="size-4" /> {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {visibleSections.length === 0 && (
+            <p className="px-2 py-5 text-sm text-muted-foreground">Aucun réglage trouvé.</p>
+          )}
+        </aside>
+        <div
+          ref={contentRef}
+          data-testid="settings-scroll-panel"
+          className="min-h-0 min-w-0 overflow-y-auto bg-background px-5 py-6 sm:px-8 lg:p-10"
+        >
+          <div className="w-full max-w-[820px]">
+            <TabsContent value="general" className="m-0">
+              <GeneralSection />
+            </TabsContent>
+            <TabsContent value="accounts" className="m-0">
+              <AccountsSection />
+            </TabsContent>
+            <TabsContent value="interface" className="m-0">
+              <InterfaceSection />
+            </TabsContent>
+            <TabsContent value="shortcuts" className="m-0">
+              <ShortcutsSection />
+            </TabsContent>
+            <TabsContent value="client" className="m-0">
+              <ClientSection />
+            </TabsContent>
+            <TabsContent value="performance" className="m-0">
+              <PerformanceSection />
+            </TabsContent>
+            <TabsContent value="logs" className="m-0">
+              <LogsSection />
+            </TabsContent>
+            <TabsContent value="about" className="m-0">
+              <AboutSection />
+            </TabsContent>
+          </div>
         </div>
-        <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 lg:grid">
-          {sections.map(([id, label, Icon]) => (
-            <TabsTrigger
-              key={id}
-              value={id}
-              className="h-10 shrink-0 justify-start gap-2 px-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none lg:w-full"
-            >
-              <Icon className="size-4" /> {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </aside>
-      <div className="w-full min-w-0 max-w-5xl p-5 sm:p-8 lg:p-10">
-        <TabsContent value="general" className="m-0">
-          <GeneralSection />
-        </TabsContent>
-        <TabsContent value="accounts" className="m-0">
-          <AccountsSection />
-        </TabsContent>
-        <TabsContent value="interface" className="m-0">
-          <InterfaceSection />
-        </TabsContent>
-        <TabsContent value="shortcuts" className="m-0">
-          <ShortcutsSection />
-        </TabsContent>
-        <TabsContent value="client" className="m-0">
-          <ClientSection />
-        </TabsContent>
-        <TabsContent value="performance" className="m-0">
-          <PerformanceSection />
-        </TabsContent>
-        <TabsContent value="logs" className="m-0">
-          <LogsSection />
-        </TabsContent>
-        <TabsContent value="about" className="m-0">
-          <AboutSection />
-        </TabsContent>
       </div>
     </Tabs>
   );
@@ -134,17 +194,19 @@ function SectionHeader({
   description: string;
 }) {
   return (
-    <header className="mb-7">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>
-      <h2 className="mt-1 text-3xl font-semibold tracking-tight">{title}</h2>
-      <p className="mt-2 max-w-2xl leading-6 text-muted-foreground">{description}</p>
+    <header className="mb-4">
+      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
+        {eyebrow}
+      </p>
+      <h2 className="mt-1 font-serif text-2xl font-semibold tracking-[-0.01em]">{title}</h2>
+      <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">{description}</p>
     </header>
   );
 }
 
 function SettingsCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <Card className={className}>
+    <Card className={cn("overflow-hidden", className)}>
       <CardContent className="divide-y divide-border p-0">{children}</CardContent>
     </Card>
   );
@@ -154,7 +216,7 @@ function SettingRow({ children, className }: { children: ReactNode; className?: 
   return (
     <div
       className={cn(
-        "flex min-h-20 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between",
+        "flex min-h-[72px] flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
@@ -166,8 +228,8 @@ function SettingRow({ children, className }: { children: ReactNode; className?: 
 function SettingCopy({ label, description }: { label: string; description: string }) {
   return (
     <div className="grid gap-1">
-      <strong className="text-sm font-medium">{label}</strong>
-      <span className="text-sm leading-5 text-muted-foreground">{description}</span>
+      <strong className="text-sm font-semibold">{label}</strong>
+      <span className="text-xs leading-5 text-muted-foreground">{description}</span>
     </div>
   );
 }
@@ -335,13 +397,14 @@ function InterfaceSection() {
       />
       <SettingsCard>
         <SettingRow>
-          <SettingCopy label="Thème" description="Le thème sombre est optimisé pour le jeu." />
+          <SettingCopy label="Thème" description="Clair, sombre ou synchronisé avec le système." />
           <SettingSelect
             label="Thème"
             value={settings.theme}
             onValueChange={(value) => void update("theme", value as AppSettings["theme"])}
           >
             <SelectItem value="dark">Sombre</SelectItem>
+            <SelectItem value="light">Clair</SelectItem>
             <SelectItem value="system">Système</SelectItem>
           </SettingSelect>
         </SettingRow>
@@ -363,6 +426,12 @@ function InterfaceSection() {
           />
         </SettingRow>
         <Toggle
+          label="Réduire les animations"
+          description="Neutralise les pulsations et les transitions décoratives."
+          checked={settings.reduceMotion}
+          onChange={(value) => void update("reduceMotion", value)}
+        />
+        <Toggle
           label="Onglets compacts"
           description="Réduit la largeur de la barre d’onglets."
           checked={settings.compactTabs}
@@ -376,7 +445,7 @@ function InterfaceSection() {
         />
         <Toggle
           label="Indicateurs de notification"
-          description="Montre les alertes discrètes sur les onglets."
+          description="Affiche les alertes dans l’application et sur les onglets."
           checked={settings.showNotifications}
           onChange={(value) => void update("showNotifications", value)}
         />
@@ -609,7 +678,7 @@ function PerformanceSection() {
           label="Suspendre les onglets inactifs"
           description={
             attentionNeedsBackground
-              ? "Ignoré tant qu’un changement automatique d’onglet est activé."
+              ? "Ignoré tant qu’une bascule automatique ou les notifications sont activées."
               : "Recommandé sur Android et les appareils à mémoire limitée."
           }
           checked={settings.suspendInactiveTabs}
@@ -781,8 +850,8 @@ function AboutSection() {
       />
       <Card className="max-w-2xl">
         <CardHeader>
-          <div className="mb-3 grid size-14 place-items-center rounded-2xl border border-primary/30 bg-primary/10 text-2xl font-black text-primary">
-            T
+          <div className="mb-3 grid size-14 place-items-center rounded-2xl border border-primary/30 bg-primary/10 p-2">
+            <img src="/twelia-icon.png" alt="" className="size-full object-contain" />
           </div>
           <CardTitle className="text-2xl">Twelia</CardTitle>
         </CardHeader>

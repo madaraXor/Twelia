@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import { CircleAlert, CircleCheck, Plus, Settings, UserPlus } from "lucide-react";
+import { ArrowLeft, CircleAlert, CircleCheck, Plus, Settings, UserPlus } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,10 +25,11 @@ import {
   onClientInstallProgress,
   type ClientStatus,
 } from "../game/clientService";
-import { isTauriRuntime } from "../platform/platform";
+import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import { useTabStore } from "../tabs/tabStore";
 
 export function HomeTab() {
+  const mobile = isMobilePlatform();
   const accounts = useAccountStore((state) => state.accounts);
   const createAccount = useAccountStore((state) => state.createAccount);
   const updateAccount = useAccountStore((state) => state.updateAccount);
@@ -37,6 +38,7 @@ export function HomeTab() {
   const openGame = useTabStore((state) => state.openGame);
   const tabs = useTabStore((state) => state.tabs);
   const gameTabs = useMemo(() => tabs.filter((tab) => tab.type === "game"), [tabs]);
+  const lastGameTab = gameTabs.at(-1);
   const sessions = useGameSessionStore((state) => state.sessions);
   const [editing, setEditing] = useState<AccountProfile | "new">();
   const [deleting, setDeleting] = useState<AccountProfile>();
@@ -93,7 +95,7 @@ export function HomeTab() {
 
   return (
     <main
-      className="mx-auto min-h-full w-full max-w-7xl space-y-8 p-5 sm:p-8 lg:p-10"
+      className="mx-auto min-h-full w-full max-w-[1080px] space-y-7 px-5 py-7 sm:px-8 sm:py-9"
       aria-label="Accueil Twelia"
     >
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -103,7 +105,9 @@ export function HomeTab() {
           </p>
           <div className="flex items-center gap-3">
             <img src="/twelia-icon.png" alt="" className="size-11 object-contain sm:size-14" />
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Twelia</h1>
+            <h1 className="font-serif text-4xl font-semibold tracking-[-0.01em] sm:text-[46px]">
+              Twelia
+            </h1>
           </div>
           <p className="mt-3 text-base leading-7 text-muted-foreground">
             Gérez vos comptes et ouvrez chaque session dans son propre onglet isolé.
@@ -118,9 +122,19 @@ export function HomeTab() {
             </Badge>
           </div>
         </div>
-        <Button variant="outline" onClick={() => useTabStore.getState().openSettings()}>
-          <Settings /> Paramètres
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {mobile && lastGameTab && (
+            <Button
+              variant="outline"
+              onClick={() => useTabStore.getState().selectTab(lastGameTab.id)}
+            >
+              <ArrowLeft /> Revenir au jeu
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => useTabStore.getState().openSettings()}>
+            <Settings /> Paramètres
+          </Button>
+        </div>
       </header>
 
       <section aria-labelledby="accounts-title">
@@ -129,7 +143,10 @@ export function HomeTab() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
               {accounts.length} profil{accounts.length > 1 ? "s" : ""}
             </p>
-            <h2 id="accounts-title" className="mt-1 text-2xl font-semibold tracking-tight">
+            <h2
+              id="accounts-title"
+              className="mt-1 font-serif text-2xl font-semibold tracking-[-0.01em]"
+            >
               Comptes enregistrés
             </h2>
           </div>
@@ -139,7 +156,7 @@ export function HomeTab() {
         </div>
 
         {accounts.length === 0 ? (
-          <Card className="border-dashed bg-card/60">
+          <Card className="border-dashed border-border-strong bg-card/60">
             <CardContent className="flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center">
               <div className="grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
                 <UserPlus />
@@ -169,6 +186,17 @@ export function HomeTab() {
                 onDelete={() => setDeleting(account)}
               />
             ))}
+            <button
+              type="button"
+              className="flex min-h-[170px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border-strong bg-transparent p-[18px] text-center transition-colors hover:border-primary/50 hover:bg-primary/5"
+              onClick={() => setEditing("new")}
+            >
+              <span className="grid size-11 place-items-center rounded-full bg-primary/10 text-primary">
+                <Plus className="size-5" />
+              </span>
+              <span className="text-sm font-semibold">Nouveau profil</span>
+              <span className="text-xs text-muted-foreground">Aucun mot de passe enregistré</span>
+            </button>
           </div>
         )}
       </section>

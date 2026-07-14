@@ -7,8 +7,9 @@ export type AppSettings = {
   restoreTabs: boolean;
   confirmConnectedSessionClose: boolean;
   checkUpdatesAutomatically: boolean;
-  theme: "dark" | "system";
+  theme: "dark" | "light" | "system";
   interfaceScale: number;
+  reduceMotion: boolean;
   compactTabs: boolean;
   showCharacterNames: boolean;
   showNotifications: boolean;
@@ -28,8 +29,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restoreTabs: true,
   confirmConnectedSessionClose: true,
   checkUpdatesAutomatically: true,
-  theme: "dark",
+  theme: "system",
   interfaceScale: 1,
+  reduceMotion: false,
   compactTabs: false,
   showCharacterNames: true,
   showNotifications: true,

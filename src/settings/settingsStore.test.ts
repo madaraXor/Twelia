@@ -17,5 +17,6 @@ describe("settings migration", () => {
 
   it("restaure les valeurs par défaut si le document est absent", () => {
     expect(migrateSettings(null)).toEqual(DEFAULT_SETTINGS);
+    expect(DEFAULT_SETTINGS.theme).toBe("system");
   });
 });

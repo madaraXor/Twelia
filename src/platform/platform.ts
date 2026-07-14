@@ -6,6 +6,12 @@ export function isTauriRuntime(): boolean {
 
 export function detectPlatform(): PlatformName {
   if (typeof navigator === "undefined") return "web";
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const forced = new URLSearchParams(window.location.search).get("platform");
+    if (["windows", "macos", "linux", "android", "ios", "web"].includes(forced ?? "")) {
+      return forced as PlatformName;
+    }
+  }
   const ua = navigator.userAgent.toLowerCase();
   if (ua.includes("android")) return "android";
   if (ua.includes("iphone") || ua.includes("ipad")) return "ios";

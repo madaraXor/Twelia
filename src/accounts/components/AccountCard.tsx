@@ -39,6 +39,13 @@ const statusVariants: Record<
   "logged-out": "destructive",
 };
 
+const avatarClasses: Record<AccountProfile["sessionStatus"], string> = {
+  unknown: "border-border-strong bg-accent text-muted-foreground",
+  valid: "border-success bg-[var(--success-bg)] text-success",
+  expired: "border-warning bg-[var(--warning-bg)] text-warning",
+  "logged-out": "border-danger bg-[var(--danger-bg)] text-danger",
+};
+
 export function AccountCard({
   account,
   active,
@@ -49,14 +56,16 @@ export function AccountCard({
   onDelete,
 }: Props) {
   return (
-    <Card className="flex min-w-0 flex-col overflow-hidden transition-colors hover:border-primary/35">
-      <CardHeader className="flex-row items-start gap-3 space-y-0 pb-4">
-        <div className="grid size-11 shrink-0 place-items-center rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-primary">
+    <Card className="flex min-w-0 flex-col overflow-hidden transition-[border-color,box-shadow] hover:border-primary/35 hover:shadow-[0_12px_30px_-22px_rgba(231,178,76,.45)]">
+      <CardHeader className="flex-row items-start gap-3 space-y-0 p-[18px] pb-4">
+        <div
+          className={`grid size-11 shrink-0 place-items-center rounded-[11px] border text-sm font-extrabold ${avatarClasses[account.sessionStatus]}`}
+        >
           {account.displayName.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
           <CardTitle className="truncate text-base">{account.displayName}</CardTitle>
-          <p className="mt-1 truncate text-sm text-muted-foreground">
+          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
             {maskLoginHint(account.loginHint) ?? "Aucun identifiant renseigné"}
           </p>
         </div>
@@ -64,13 +73,13 @@ export function AccountCard({
           {statusLabels[account.sessionStatus]}
         </Badge>
       </CardHeader>
-      <CardContent className="flex-1 pb-4 text-sm text-muted-foreground">
+      <CardContent className="flex-1 px-[18px] pb-4 text-[13px] text-muted-foreground">
         {account.preferredCharacter ?? account.preferredServer ?? "Profil prêt"}
         {account.lastUsedAt
           ? ` · utilisé ${new Intl.DateTimeFormat("fr", { dateStyle: "medium" }).format(new Date(account.lastUsedAt))}`
           : ""}
       </CardContent>
-      <CardFooter className="gap-2">
+      <CardFooter className="gap-2 px-[18px] pb-[18px]">
         <Button className="flex-1" onClick={onPlay}>
           <Play /> {active ? "Afficher" : "Jouer"}
         </Button>
@@ -95,7 +104,7 @@ export function AccountCard({
               <LogOut /> Déconnecter
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-300 focus:text-red-200" onSelect={onDelete}>
+            <DropdownMenuItem className="text-danger focus:text-danger" onSelect={onDelete}>
               <Trash2 /> Supprimer les données locales
             </DropdownMenuItem>
           </DropdownMenuContent>

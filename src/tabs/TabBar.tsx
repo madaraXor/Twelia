@@ -30,13 +30,11 @@ import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
 import { useGameSessionStore } from "../game/GameSessionManager";
 import { setGameSessionVisibility } from "../game/GameRuntime";
-import { isMobilePlatform } from "../platform/platform";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "./tabStore";
 import type { WorkspaceTab } from "./tabTypes";
 
 export function TabBar() {
-  const mobile = isMobilePlatform();
   const tabs = useTabStore((state) => state.tabs);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const accounts = useAccountStore((state) => state.accounts);
@@ -127,18 +125,10 @@ export function TabBar() {
         onValueChange={(value) => useTabStore.getState().selectTab(value)}
       >
         <nav
-          className={cn(
-            "relative z-20 shrink-0 border-b border-border bg-background/95 backdrop-blur-xl",
-            !mobile && "pt-[env(safe-area-inset-top)]",
-          )}
+          className="relative z-20 shrink-0 border-b border-border bg-chrome"
           aria-label="Onglets principaux"
         >
-          <TabsList
-            className={cn(
-              "flex w-full justify-start overflow-x-auto overflow-y-hidden rounded-none bg-transparent text-muted-foreground",
-              mobile ? "h-10 px-1 pt-0" : "h-14 px-2 pt-2",
-            )}
-          >
+          <TabsList className="flex h-[50px] w-full justify-start gap-1.5 overflow-x-auto overflow-y-hidden rounded-none bg-transparent px-3 text-muted-foreground">
             {tabs.map((tab) => {
               const gameSession = sessionFor(tab);
               const active = tab.id === activeTabId;
@@ -151,11 +141,10 @@ export function TabBar() {
                     <div
                       draggable={tab.type !== "home"}
                       className={cn(
-                        "group relative flex shrink-0 items-center rounded-t-lg border border-b-0 border-transparent",
-                        mobile ? "h-9 max-w-44" : "h-11",
-                        !mobile && (compact ? "max-w-44" : "max-w-60"),
+                        "group relative flex h-8 shrink-0 items-center rounded-full border border-border bg-secondary text-muted-foreground transition-[background-color,color,border-color,box-shadow]",
+                        compact ? "max-w-44" : "max-w-60",
                         active &&
-                          "border-border bg-card text-foreground shadow-[inset_0_2px_0_var(--color-primary)]",
+                          "border-primary bg-primary text-primary-foreground shadow-[0_5px_14px_rgba(231,178,76,.16)]",
                       )}
                       onDragStart={(event) => event.dataTransfer.setData("text/tab-id", tab.id)}
                       onDragOver={(event) => event.preventDefault()}
@@ -168,8 +157,7 @@ export function TabBar() {
                       <TabsTrigger
                         value={tab.id}
                         className={cn(
-                          "h-full min-w-0 flex-1 justify-start rounded-t-lg rounded-b-none bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none",
-                          mobile ? "gap-1.5 px-2 text-xs" : "gap-2 px-3",
+                          "h-full min-w-0 flex-1 justify-start gap-2 rounded-full bg-transparent px-3 text-[13px] font-extrabold text-inherit shadow-none data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none",
                         )}
                       >
                         {tab.type === "home" && (
@@ -185,11 +173,11 @@ export function TabBar() {
                             className={cn(
                               "size-2 shrink-0 rounded-full bg-muted-foreground",
                               gameSession?.status === "running" &&
-                                "bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.12)]",
+                                "bg-success shadow-[0_0_0_3px_var(--success-bg)]",
                               ["error", "disconnected"].includes(gameSession?.status ?? "") &&
-                                "bg-red-400",
+                                "bg-danger",
                               ["starting", "authenticating"].includes(gameSession?.status ?? "") &&
-                                "animate-pulse bg-amber-400",
+                                "session-dot-pulse bg-warning",
                             )}
                           />
                         )}
@@ -209,8 +197,7 @@ export function TabBar() {
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                "mr-0.5 shrink-0 opacity-60 hover:opacity-100",
-                                mobile ? "size-7" : "size-8",
+                                "mr-0.5 size-7 shrink-0 rounded-full opacity-60 shadow-none hover:bg-black/10 hover:opacity-100",
                               )}
                               aria-label={`Actions pour ${labelFor(tab)}`}
                             >
@@ -238,8 +225,7 @@ export function TabBar() {
                           variant="ghost"
                           size="icon"
                           className={cn(
-                            "mr-1 shrink-0 opacity-60 hover:opacity-100",
-                            mobile ? "size-7" : "size-8",
+                            "mr-1 size-7 shrink-0 rounded-full opacity-60 shadow-none hover:bg-black/10 hover:opacity-100",
                           )}
                           aria-label={`Fermer ${labelFor(tab)}`}
                           onClick={() => requestClose(tab)}
@@ -258,7 +244,7 @@ export function TabBar() {
             <Button
               variant="ghost"
               size="icon"
-              className={cn("ml-1 shrink-0", mobile ? "size-8" : "mt-0.5")}
+              className="ml-0.5 size-8 shrink-0 rounded-full border border-border bg-transparent text-muted-foreground shadow-none hover:border-primary/35 hover:text-foreground"
               aria-label="Nouvelle session"
               onClick={() => useTabStore.getState().selectTab("home")}
             >

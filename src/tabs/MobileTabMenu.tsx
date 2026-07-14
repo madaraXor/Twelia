@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Gamepad2, Home, RefreshCw, Settings, X } from "lucide-react";
+import { Check, Gamepad2, RefreshCw, Settings, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +21,29 @@ import {
 import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
 import { useGameSessionStore } from "../game/GameSessionManager";
+import type { GameSessionStatus } from "../game/gameTypes";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "./tabStore";
 import type { WorkspaceTab } from "./tabTypes";
+
+function statusDot(status?: GameSessionStatus) {
+  return cn(
+    "size-2 shrink-0 rounded-full bg-muted-foreground",
+    ["running", "background"].includes(status ?? "") && "bg-success",
+    ["error", "disconnected", "stopped"].includes(status ?? "") && "bg-danger",
+    ["created", "starting", "authenticating"].includes(status ?? "") &&
+      "session-dot-pulse bg-warning",
+    status === "suspended" && "bg-warning",
+  );
+}
+
+function statusLabel(status?: GameSessionStatus) {
+  if (["running", "background"].includes(status ?? "")) return "connectée";
+  if (["created", "starting", "authenticating"].includes(status ?? "")) return "connexion…";
+  if (status === "suspended") return "suspendue";
+  if (["error", "disconnected", "stopped"].includes(status ?? "")) return "déconnectée";
+  return "à vérifier";
+}
 
 export function MobileTabMenu() {
   const tabs = useTabStore((state) => state.tabs);
@@ -33,6 +53,7 @@ export function MobileTabMenu() {
   const [open, setOpen] = useState(false);
   const [pendingClose, setPendingClose] = useState<WorkspaceTab>();
 
+  const gameTabs = tabs.filter((tab) => tab.type === "game");
   const labelFor = (tab: WorkspaceTab) => {
     if (tab.type === "home") return "Accueil Twelia";
     if (tab.type === "settings") return "Paramètres";
@@ -75,44 +96,51 @@ export function MobileTabMenu() {
           <Button
             variant="outline"
             size="icon"
-            className="fixed left-3 top-3 z-[70] size-10 rounded-full border-primary/40 bg-background/75 p-1.5 shadow-xl backdrop-blur-md"
-            aria-label="Ouvrir les onglets Twelia"
+            className={cn(
+              "fixed z-[70] size-[50px] rounded-full border-primary/45 bg-background/80 p-2 shadow-[0_6px_18px_rgba(0,0,0,.5)] backdrop-blur-md",
+              activeTab?.type === "game"
+                ? "left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))]"
+                : "bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))]",
+            )}
+            aria-label="Ouvrir les sessions Twelia"
           >
             <img src="/twelia-icon.png" alt="" className="size-full object-contain" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          sideOffset={8}
-          className="z-[80] max-h-[calc(100vh-4.5rem)] w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto bg-background/90 backdrop-blur-xl"
+          sideOffset={10}
+          className="z-[80] max-h-[calc(100vh-5.5rem)] w-[270px] max-w-[calc(100vw-2rem)] overflow-y-auto bg-popover/95 p-1.5 backdrop-blur-xl"
         >
-          {tabs.map((tab) => {
+          <div className="px-3.5 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Sessions
+          </div>
+          {gameTabs.length === 0 && (
+            <p className="px-3.5 py-3 text-[13px] text-muted-foreground">Aucune session ouverte.</p>
+          )}
+          {gameTabs.map((tab) => {
             const session = sessionFor(tab);
             const active = tab.id === activeTabId;
             return (
               <DropdownMenuItem
                 key={tab.id}
-                className="gap-3"
+                className={cn("gap-3 px-3.5", active && "bg-surface-elevated font-extrabold")}
                 onSelect={() => useTabStore.getState().selectTab(tab.id)}
               >
-                {tab.type === "home" && <Home />}
-                {tab.type === "settings" && <Settings />}
-                {tab.type === "game" && (
-                  <span
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full bg-muted-foreground",
-                      session?.status === "running" && "bg-emerald-400",
-                      ["error", "disconnected"].includes(session?.status ?? "") && "bg-red-400",
-                      ["starting", "authenticating"].includes(session?.status ?? "") &&
-                        "animate-pulse bg-amber-400",
-                    )}
-                  />
-                )}
+                <span className={statusDot(session?.status)} />
                 <span className="min-w-0 flex-1 truncate">{labelFor(tab)}</span>
                 {active && <Check className="text-primary" />}
               </DropdownMenuItem>
             );
           })}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => useTabStore.getState().selectTab("home")}>
+            <Gamepad2 /> Gérer les comptes
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => useTabStore.getState().openSettings()}>
+            <Settings /> Paramètres
+          </DropdownMenuItem>
 
           {activeTab?.type === "game" && (
             <>
@@ -122,20 +150,27 @@ export function MobileTabMenu() {
                   activeSession && void useGameSessionStore.getState().reload(activeSession.id)
                 }
               >
-                <RefreshCw /> Recharger {labelFor(activeTab)}
+                <RefreshCw /> Recharger la session
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => requestClose(activeTab)}>
-                <X /> Fermer {labelFor(activeTab)}
+              <DropdownMenuItem
+                className="text-danger focus:text-danger"
+                onSelect={() => requestClose(activeTab)}
+              >
+                <X /> Fermer la session
               </DropdownMenuItem>
             </>
           )}
-
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => useTabStore.getState().selectTab("home")}>
-            <Gamepad2 /> Gérer les comptes
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {activeTab?.type === "game" && (
+        <div className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/80 px-3.5 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md">
+          <span className={statusDot(activeSession?.status)} />
+          <span className="max-w-52 truncate">
+            {labelFor(activeTab)} · {statusLabel(activeSession?.status)}
+          </span>
+        </div>
+      )}
 
       <AlertDialog
         open={Boolean(pendingClose)}

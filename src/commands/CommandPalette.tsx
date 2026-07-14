@@ -101,7 +101,7 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <DialogContent className="max-w-2xl overflow-hidden p-0">
+      <DialogContent className="top-[13vh] max-w-[560px] translate-y-0 overflow-hidden p-0 [&>button]:hidden">
         <DialogTitle className="sr-only">Palette de commandes</DialogTitle>
         <DialogDescription className="sr-only">
           Rechercher une commande, un compte ou un onglet.
@@ -136,7 +136,7 @@ export function CommandPalette() {
               </div>
             ))}
           </CommandList>
-          <footer className="flex gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          <footer className="flex gap-4 border-t border-border px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
             <span>↑↓ naviguer</span>
             <span>Entrée exécuter</span>
             <span>Échap fermer</span>
