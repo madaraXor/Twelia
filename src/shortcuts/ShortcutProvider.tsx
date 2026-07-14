@@ -25,8 +25,16 @@ export function ShortcutProvider({ children }: PropsWithChildren) {
   const sessions = useGameSessionStore((state) => state.sessions);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isEditable(event.target)) return;
       const accelerator = keyboardEventAccelerator(event);
+      if (isEditable(event.target)) {
+        const normalized = normalizeAccelerator(accelerator);
+        const binding = findBindingForAccelerator(bindings, normalized);
+        if (
+          binding?.action !== "open-command-palette" ||
+          findShortcutConflicts(bindings).has(normalized)
+        )
+          return;
+      }
       if (!executeAccelerator(bindings, accelerator)) return;
       event.preventDefault();
     };

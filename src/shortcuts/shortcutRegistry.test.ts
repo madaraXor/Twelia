@@ -1,6 +1,7 @@
 import {
   defaultBindings,
   findShortcutConflicts,
+  migrateShortcuts,
   normalizeAccelerator,
   validateAccelerator,
 } from "./shortcutRegistry";
@@ -19,5 +20,34 @@ describe("shortcut registry", () => {
     bindings[1] = { ...bindings[1]!, accelerator: "Ctrl+P" };
     bindings[2] = { ...bindings[2]!, accelerator: null };
     expect(findShortcutConflicts(bindings).get("Ctrl+P")).toEqual(["next-tab", "previous-tab"]);
+  });
+
+  it("utilise Ctrl+K pour ouvrir la palette", () => {
+    const palette = defaultBindings(false).find(
+      (binding) => binding.action === "open-command-palette",
+    );
+    expect(palette?.accelerator).toBe("Ctrl+K");
+    expect(palette?.defaultAccelerator).toBe("Ctrl+K");
+  });
+
+  it("migre l’ancien raccourci par défaut sans écraser une personnalisation", () => {
+    const legacy = defaultBindings(false).map((binding) =>
+      binding.action === "open-command-palette"
+        ? { ...binding, accelerator: "Ctrl+Shift+P", defaultAccelerator: "Ctrl+Shift+P" }
+        : binding,
+    );
+    const migrated = migrateShortcuts({ schemaVersion: 1, bindings: legacy });
+    expect(
+      migrated.bindings.find((binding) => binding.action === "open-command-palette")?.accelerator,
+    ).toBe("Ctrl+K");
+
+    const customized = legacy.map((binding) =>
+      binding.action === "open-command-palette" ? { ...binding, accelerator: "Ctrl+J" } : binding,
+    );
+    expect(
+      migrateShortcuts({ schemaVersion: 1, bindings: customized }).bindings.find(
+        (binding) => binding.action === "open-command-palette",
+      )?.accelerator,
+    ).toBe("Ctrl+J");
   });
 });

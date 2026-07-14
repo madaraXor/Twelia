@@ -1,6 +1,7 @@
 import type { ShortcutAction, ShortcutBinding, ShortcutsDocument } from "./shortcutTypes";
 
 const ctrl = (isMac: boolean) => (isMac ? "Meta" : "Ctrl");
+const LEGACY_COMMAND_PALETTE_DEFAULTS = new Set(["Ctrl+Shift+P", "Meta+Shift+P"]);
 
 export function defaultBindings(
   isMac = /Mac|iPhone|iPad/.test(navigator.platform),
@@ -25,7 +26,7 @@ export function defaultBindings(
     ["open-home", "Ouvrir l’accueil", `${mod}+L`],
     ["reload-active-session", "Recharger la session", `${mod}+R`],
     ["toggle-fullscreen", "Basculer le plein écran", "F11"],
-    ["open-command-palette", "Ouvrir la palette", `${mod}+Shift+P`],
+    ["open-command-palette", "Ouvrir la palette", `${mod}+K`],
   ];
   return entries.map(([action, label, accelerator]) => ({
     action,
@@ -114,12 +115,17 @@ export function migrateShortcuts(input: unknown): ShortcutsDocument {
     schemaVersion: 1,
     bindings: defaults.map((binding) => {
       const saved = custom.get(binding.action);
-      return saved
-        ? {
-            ...binding,
-            accelerator: saved.accelerator ? normalizeAccelerator(saved.accelerator) : null,
-          }
-        : binding;
+      if (!saved) return binding;
+      const savedAccelerator = saved.accelerator ? normalizeAccelerator(saved.accelerator) : null;
+      const usedLegacyDefault =
+        binding.action === "open-command-palette" &&
+        savedAccelerator !== null &&
+        LEGACY_COMMAND_PALETTE_DEFAULTS.has(savedAccelerator) &&
+        LEGACY_COMMAND_PALETTE_DEFAULTS.has(normalizeAccelerator(saved.defaultAccelerator));
+      return {
+        ...binding,
+        accelerator: usedLegacyDefault ? binding.accelerator : savedAccelerator,
+      };
     }),
   };
 }
