@@ -22,7 +22,7 @@
 
 Twelia réunit plusieurs sessions de jeu dans une seule application : onglets sur ordinateur, menu flottant en plein écran sur Android. Chaque profil possède son propre espace de travail et peut conserver sa session sans enregistrer le mot de passe du compte.
 
-Le dépôt ne contient ni ressources ni fichiers propriétaires de DOFUS Touch. Le client est récupéré au moment de l’installation, vérifié en SHA-256, puis préparé localement dans un runtime distinct. Twelia ne reprend aucun code de Lindo ou de DofuEmu.
+Le dépôt ne contient ni ressources ni fichiers propriétaires de DOFUS Touch. Le client est récupéré au moment de l’installation, vérifié en SHA-256, puis préparé localement dans un runtime distinct.
 
 ## Fonctionnalités
 
