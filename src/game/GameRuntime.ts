@@ -1,7 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "../platform/platform";
+import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import type { GameSession, SessionRuntime } from "./gameTypes";
 import { createId } from "../core/id";
+
+export const MOBILE_GAME_RELOAD_EVENT = "twelia:reload-mobile-game";
+export type MobileGameReloadDetail = { sessionId: string };
+
+export function requestMobileGameReload(sessionId: string): void {
+  window.dispatchEvent(
+    new CustomEvent<MobileGameReloadDetail>(MOBILE_GAME_RELOAD_EVENT, {
+      detail: { sessionId },
+    }),
+  );
+}
 
 export type GameViewBounds = {
   x: number;
@@ -66,6 +77,10 @@ export class TauriGameRuntime implements SessionRuntime {
     if (isTauriRuntime()) await invoke("resume_game_session", { sessionId });
   }
   async reload(sessionId: string): Promise<void> {
+    if (isMobilePlatform()) {
+      requestMobileGameReload(sessionId);
+      return;
+    }
     if (isTauriRuntime()) {
       await invoke("reload_game_session", { sessionId });
       return;

@@ -9,6 +9,8 @@ export type GameSessionStatus =
   | "error"
   | "stopped";
 
+export type GameConnectionStatus = "connecting" | "connected" | "disconnected";
+
 export type GameSession = {
   id: string;
   accountId: string;
@@ -17,6 +19,7 @@ export type GameSession = {
   createdAt: string;
   updatedAt: string;
   error?: string;
+  connectionStatus?: GameConnectionStatus;
 };
 
 export interface SessionRuntime {

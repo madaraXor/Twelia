@@ -6,6 +6,13 @@ import { storageGateway } from "../storage/storageGateway";
 import { toTweliaError, type TweliaError } from "../core/errors";
 
 const service = new AccountService(storageGateway);
+let sessionStatusSaveQueue: Promise<void> = Promise.resolve();
+
+function saveSessionStatus(document: AccountsDocument): Promise<void> {
+  const save = sessionStatusSaveQueue.then(() => storageGateway.save("accounts", document));
+  sessionStatusSaveQueue = save.catch(() => undefined);
+  return save;
+}
 
 type AccountState = AccountsDocument & {
   hydrated: boolean;
@@ -55,6 +62,8 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   },
   setSessionStatus: async (id, status) => {
     const state = get();
+    const current = state.accounts.find((account) => account.id === id);
+    if (!current || current.sessionStatus === status) return;
     const next = {
       schemaVersion: 1 as const,
       defaultAccountId: state.defaultAccountId,
@@ -64,8 +73,8 @@ export const useAccountStore = create<AccountState>((set, get) => ({
           : account,
       ),
     };
-    await storageGateway.save("accounts", next);
     set(next);
+    await saveSessionStatus(next);
   },
   setDefaultAccount: async (id) => {
     const state = get();

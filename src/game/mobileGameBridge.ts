@@ -2,7 +2,6 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useEffect } from "react";
 import { detectPlatform, isTauriRuntime } from "../platform/platform";
 
-export const MOBILE_OAUTH_CALLBACK_EVENT = "twelia:mobile-oauth-callback";
 const MOBILE_OAUTH_TARGET_KEY = "twelia:pending-mobile-oauth-profile";
 
 export type MobileOAuthPayload = { code: string } | { error: string };
@@ -10,6 +9,40 @@ export type MobileOAuthCallback = {
   accountId: string;
   payload: MobileOAuthPayload;
 };
+
+type MobileOAuthCallbackListener = (callback: MobileOAuthCallback) => void;
+
+const mobileOAuthListeners = new Map<string, Set<MobileOAuthCallbackListener>>();
+const pendingMobileOAuthCallbacks = new Map<string, MobileOAuthCallback>();
+
+export function deliverMobileOAuthCallback(callback: MobileOAuthCallback): void {
+  const listeners = mobileOAuthListeners.get(callback.accountId);
+  if (!listeners?.size) {
+    pendingMobileOAuthCallbacks.set(callback.accountId, callback);
+    return;
+  }
+  listeners.forEach((listener) => listener(callback));
+}
+
+export function subscribeMobileOAuthCallback(
+  accountId: string,
+  listener: MobileOAuthCallbackListener,
+): () => void {
+  const listeners = mobileOAuthListeners.get(accountId) ?? new Set<MobileOAuthCallbackListener>();
+  listeners.add(listener);
+  mobileOAuthListeners.set(accountId, listeners);
+
+  const pending = pendingMobileOAuthCallbacks.get(accountId);
+  if (pending) {
+    pendingMobileOAuthCallbacks.delete(accountId);
+    listener(pending);
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size) mobileOAuthListeners.delete(accountId);
+  };
+}
 
 export function rememberMobileOAuthTarget(accountId: string): void {
   window.localStorage.setItem(MOBILE_OAUTH_TARGET_KEY, accountId);
@@ -46,11 +79,7 @@ function dispatchUrls(urls: string[] | null): void {
     if (!payload) continue;
     const accountId = consumeMobileOAuthTarget();
     if (!accountId) continue;
-    window.dispatchEvent(
-      new CustomEvent<MobileOAuthCallback>(MOBILE_OAUTH_CALLBACK_EVENT, {
-        detail: { accountId, payload },
-      }),
-    );
+    deliverMobileOAuthCallback({ accountId, payload });
   }
 }
 

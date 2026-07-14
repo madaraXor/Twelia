@@ -537,10 +537,7 @@ impl SessionManager {
 
     #[cfg(mobile)]
     pub fn reload(&self, _app: &AppHandle, session_id: &str) -> Result<(), AppError> {
-        self.get(session_id)?;
-        Err(AppError::Runtime(
-            "La vue de jeu Android n’est pas encore disponible dans cette préversion.".into(),
-        ))
+        self.get(session_id).map(|_| ())
     }
 
     #[cfg(mobile)]
@@ -631,8 +628,10 @@ const GAME_EVENT_BRIDGE_SCRIPT: &str = r#"
   var howlerWasMuted;
   var mediaMuteStates = new WeakMap();
   var webAudioGains = [];
+  var webAudioContexts = [];
   var webAudioGainByContext = new WeakMap();
   var originalAudioConnect = window.AudioNode && window.AudioNode.prototype.connect;
+  var originalAudioDisconnect = window.AudioNode && window.AudioNode.prototype.disconnect;
 
   function masterGainFor(context) {
     var existing = webAudioGainByContext.get(context);
@@ -641,6 +640,7 @@ const GAME_EVENT_BRIDGE_SCRIPT: &str = r#"
     master.gain.value = muted ? 0 : 1;
     webAudioGainByContext.set(context, master);
     webAudioGains.push(master);
+    webAudioContexts.push(context);
     originalAudioConnect.call(master, context.destination);
     return master;
   }
@@ -657,10 +657,31 @@ const GAME_EVENT_BRIDGE_SCRIPT: &str = r#"
     };
   }
 
+  if (originalAudioDisconnect) {
+    window.AudioNode.prototype.disconnect = function (destination, output, input) {
+      if (this.context && destination === this.context.destination) {
+        var master = webAudioGainByContext.get(this.context);
+        if (master) {
+          if (arguments.length >= 3) return originalAudioDisconnect.call(this, master, output, 0);
+          if (arguments.length >= 2) return originalAudioDisconnect.call(this, master, output);
+          return originalAudioDisconnect.call(this, master);
+        }
+      }
+      return originalAudioDisconnect.apply(this, arguments);
+    };
+  }
+
   function applyMutedState() {
     webAudioGains.forEach(function (master) {
       master.gain.value = muted ? 0 : 1;
     });
+    if (!muted) {
+      webAudioContexts.forEach(function (context) {
+        if (context.state === "suspended" && typeof context.resume === "function") {
+          context.resume().catch(function () {});
+        }
+      });
+    }
     if (window.Howler && typeof window.Howler.mute === "function") {
       if (muted) {
         if (howlerWasMuted === undefined) howlerWasMuted = Boolean(window.Howler._muted);
@@ -861,6 +882,8 @@ mod tests {
         assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("mediaMuteStates.get(media)"));
         assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("master.gain.value = muted ? 0 : 1"));
         assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("window.AudioNode.prototype.connect"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("window.AudioNode.prototype.disconnect"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("context.resume()"));
         assert!(!GAME_EVENT_BRIDGE_SCRIPT.contains("AudioContext.suspend"));
     }
 }

@@ -1,8 +1,10 @@
 import {
   clearMobileOAuthTarget,
   consumeMobileOAuthTarget,
+  deliverMobileOAuthCallback,
   oauthPayloadFromUrl,
   rememberMobileOAuthTarget,
+  subscribeMobileOAuthCallback,
 } from "./mobileGameBridge";
 
 describe("mobile game bridge", () => {
@@ -27,5 +29,18 @@ describe("mobile game bridge", () => {
     rememberMobileOAuthTarget("profile-b");
     clearMobileOAuthTarget("profile-a");
     expect(consumeMobileOAuthTarget()).toBe("profile-b");
+  });
+
+  it("remet un retour OAuth en attente jusqu’à ce que le profil soit prêt", () => {
+    deliverMobileOAuthCallback({ accountId: "profile-c", payload: { code: "queued-code" } });
+    const listener = vi.fn();
+
+    const unsubscribe = subscribeMobileOAuthCallback("profile-c", listener);
+
+    expect(listener).toHaveBeenCalledWith({
+      accountId: "profile-c",
+      payload: { code: "queued-code" },
+    });
+    unsubscribe();
   });
 });

@@ -22,7 +22,7 @@ const PLAY_STORE_URL: &str =
     "https://play.google.com/store/apps/details?id=com.ankama.dofustouch&hl=fr&gl=FR";
 const MAX_MANIFEST_SIZE: usize = 10 * 1024 * 1024;
 const MAX_FILE_SIZE: u64 = 512 * 1024 * 1024;
-pub const COMPATIBILITY_VERSION: u32 = 9;
+pub const COMPATIBILITY_VERSION: u32 = 11;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CompatibilityTarget {
@@ -700,8 +700,10 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
   var howlerWasMuted;
   var mediaMuteStates = new WeakMap();
   var webAudioGains = [];
+  var webAudioContexts = [];
   var webAudioGainByContext = new WeakMap();
   var originalAudioConnect = window.AudioNode && window.AudioNode.prototype.connect;
+  var originalAudioDisconnect = window.AudioNode && window.AudioNode.prototype.disconnect;
 
   function masterGainFor(context) {{
     var existing = webAudioGainByContext.get(context);
@@ -710,6 +712,7 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
     master.gain.value = muted ? 0 : 1;
     webAudioGainByContext.set(context, master);
     webAudioGains.push(master);
+    webAudioContexts.push(context);
     originalAudioConnect.call(master, context.destination);
     return master;
   }}
@@ -726,10 +729,31 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
     }};
   }}
 
+  if (originalAudioDisconnect) {{
+    window.AudioNode.prototype.disconnect = function (destination, output, input) {{
+      if (this.context && destination === this.context.destination) {{
+        var master = webAudioGainByContext.get(this.context);
+        if (master) {{
+          if (arguments.length >= 3) return originalAudioDisconnect.call(this, master, output, 0);
+          if (arguments.length >= 2) return originalAudioDisconnect.call(this, master, output);
+          return originalAudioDisconnect.call(this, master);
+        }}
+      }}
+      return originalAudioDisconnect.apply(this, arguments);
+    }};
+  }}
+
   function applyMutedState() {{
     webAudioGains.forEach(function (master) {{
       master.gain.value = muted ? 0 : 1;
     }});
+    if (!muted) {{
+      webAudioContexts.forEach(function (context) {{
+        if (context.state === "suspended" && typeof context.resume === "function") {{
+          context.resume().catch(function () {{}});
+        }}
+      }});
+    }}
     if (window.Howler && typeof window.Howler.mute === "function") {{
       if (muted) {{
         if (howlerWasMuted === undefined) howlerWasMuted = Boolean(window.Howler._muted);
@@ -770,7 +794,13 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
     return popup;
   }};
 
-  post("bridge-ready", {{ compatibilityVersion: {COMPATIBILITY_VERSION} }});
+  var lastConnectionStatus;
+  function reportConnectionStatus(force) {{
+    var status = window.gui && window.gui.isConnected ? "connected" : "disconnected";
+    if (!force && status === lastConnectionStatus) return;
+    lastConnectionStatus = status;
+    post("connection-status", {{ status: status }});
+  }}
 
   window.addEventListener("message", function (event) {{
     if (event.source !== window.parent) return;
@@ -778,14 +808,28 @@ window.appInfo = {{ version: window.__TWELIA__.appVersion }};
     if (!data || data.source !== "twelia-host") return;
     if (data.type === "set-muted") {{
       window.__TWELIA_SET_MUTED__(data.muted);
+      post("mute-state", {{ muted: muted }});
+      return;
+    }}
+    if (data.type === "get-connection-status") {{
+      reportConnectionStatus(true);
       return;
     }}
     if (data.type !== "oauth-callback") return;
     if (popup) popup.closed = true;
-    if (typeof window.__TWELIA_OAUTH_CALLBACK__ === "function") {{
-      window.__TWELIA_OAUTH_CALLBACK__(data.payload);
-    }}
+    var accepted = false;
+    try {{
+      if (typeof window.__TWELIA_OAUTH_CALLBACK__ === "function") {{
+        window.__TWELIA_OAUTH_CALLBACK__(data.payload);
+        accepted = true;
+      }}
+    }} catch (_) {{}}
+    post("oauth-callback-received", {{ requestId: data.requestId, accepted: accepted }});
   }});
+
+  post("bridge-ready", {{ compatibilityVersion: {COMPATIBILITY_VERSION} }});
+  reportConnectionStatus(true);
+  window.setInterval(function () {{ reportConnectionStatus(false); }}, 500);
 
   function installAttentionListeners() {{
     var connection = window.connectionManager;
@@ -1058,6 +1102,12 @@ mod tests {
         assert!(bootstrap.contains("mediaMuteStates.get(media)"));
         assert!(bootstrap.contains("master.gain.value = muted ? 0 : 1"));
         assert!(bootstrap.contains("window.AudioNode.prototype.connect"));
+        assert!(bootstrap.contains("window.AudioNode.prototype.disconnect"));
+        assert!(bootstrap.contains("context.resume()"));
+        assert!(bootstrap.contains("post(\"mute-state\""));
+        assert!(bootstrap.contains("post(\"connection-status\""));
+        assert!(bootstrap.contains("data.type === \"get-connection-status\""));
+        assert!(bootstrap.contains("post(\"oauth-callback-received\""));
         assert!(!bootstrap.contains("AudioContext.suspend"));
     }
 

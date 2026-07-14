@@ -230,6 +230,8 @@ export const fr = {
   "game.accountDeleted": "Ce compte a été supprimé.",
   "game.authFailed": "Connexion impossible",
   "game.authOpenFailed": "Impossible d’ouvrir le navigateur d’authentification.",
+  "game.authCallbackFailed":
+    "Le retour d’authentification n’a pas pu être transmis au jeu. Réessaie la connexion.",
   "game.startFailed": "La session n’a pas démarré",
   "game.started": "Le client est lancé",
   "game.starting": "Démarrage du client…",
@@ -515,6 +517,8 @@ export const en = {
   "game.accountDeleted": "This account has been deleted.",
   "game.authFailed": "Unable to connect",
   "game.authOpenFailed": "Unable to open the authentication browser.",
+  "game.authCallbackFailed":
+    "The authentication result could not be delivered to the game. Please try signing in again.",
   "game.startFailed": "The session did not start",
   "game.started": "The client is running",
   "game.starting": "Starting the client…",

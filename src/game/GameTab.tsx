@@ -5,22 +5,51 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccountStore } from "../accounts/accountStore";
+import { createId } from "../core/id";
 import { useI18n } from "../i18n/i18n";
 import { isMobilePlatform } from "../platform/platform";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "../tabs/tabStore";
 import { gameTabId } from "../tabs/tabTypes";
 import { findSessionByAccount, useGameSessionStore } from "./GameSessionManager";
-import { getGameSessionUrl, layoutGameSession } from "./GameRuntime";
+import {
+  getGameSessionUrl,
+  layoutGameSession,
+  MOBILE_GAME_RELOAD_EVENT,
+  type MobileGameReloadDetail,
+} from "./GameRuntime";
 import { type GameAttentionKind } from "./gameAttention";
 import { handleGameAttention } from "./handleGameAttention";
 import {
   clearMobileOAuthTarget,
-  MOBILE_OAUTH_CALLBACK_EVENT,
   rememberMobileOAuthTarget,
+  subscribeMobileOAuthCallback,
   type MobileOAuthCallback,
 } from "./mobileGameBridge";
 import { computeMobileGameFrameLayout, type MobileGameFrameLayout } from "./mobileGameLayout";
+
+function postMobileGameMuted(
+  iframe: HTMLIFrameElement | null,
+  mobileUrl: string | undefined,
+  muted: boolean,
+): void {
+  if (!iframe || !mobileUrl) return;
+  iframe.contentWindow?.postMessage(
+    { source: "twelia-host", type: "set-muted", muted },
+    new URL(mobileUrl).origin,
+  );
+}
+
+function requestMobileGameConnectionStatus(
+  iframe: HTMLIFrameElement | null,
+  mobileUrl: string | undefined,
+): void {
+  if (!iframe || !mobileUrl) return;
+  iframe.contentWindow?.postMessage(
+    { source: "twelia-host", type: "get-connection-status" },
+    new URL(mobileUrl).origin,
+  );
+}
 
 export function GameTab({ accountId }: { accountId: string }) {
   const { t } = useI18n();
@@ -35,9 +64,14 @@ export function GameTab({ accountId }: { accountId: string }) {
   const active = useTabStore((state) => state.activeTabId === gameTabId(accountId));
   const muteInactiveTabs = useSettingsStore((state) => state.muteInactiveTabs);
   const [mobileUrl, setMobileUrl] = useState<string>();
-  const [mobileBridgeReady, setMobileBridgeReady] = useState(false);
   const [authError, setAuthError] = useState<string>();
   const [mobileFrameLayout, setMobileFrameLayout] = useState<MobileGameFrameLayout>();
+  const mobileMutedRef = useRef(muteInactiveTabs && !active);
+  const mobileOAuthRetryTimersRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    mobileMutedRef.current = muteInactiveTabs && !active;
+  }, [active, muteInactiveTabs]);
 
   useEffect(() => {
     if (session || !account) return;
@@ -45,7 +79,7 @@ export function GameTab({ accountId }: { accountId: string }) {
       .getState()
       .createForAccount(accountId)
       .then((created) => useGameSessionStore.getState().start(created.id))
-      .catch(() => useAccountStore.getState().setSessionStatus(accountId, "logged-out"));
+      .catch(() => undefined);
   }, [account, accountId, session]);
 
   useEffect(() => {
@@ -119,8 +153,23 @@ export function GameTab({ accountId }: { accountId: string }) {
   }, [mobile, mobileUrl]);
 
   useEffect(() => {
+    if (!mobile || !mobileUrl || !sessionId) return;
+    const onReload = (event: Event) => {
+      const detail = (event as CustomEvent<MobileGameReloadDetail>).detail;
+      if (detail.sessionId !== sessionId) return;
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+      useGameSessionStore.getState().setConnectionStatus(sessionId, "connecting");
+      iframe.src = mobileUrl;
+    };
+    window.addEventListener(MOBILE_GAME_RELOAD_EVENT, onReload);
+    return () => window.removeEventListener(MOBILE_GAME_RELOAD_EVENT, onReload);
+  }, [mobile, mobileUrl, sessionId]);
+
+  useEffect(() => {
     if (!mobile || !mobileUrl) return;
     const gameOrigin = new URL(mobileUrl).origin;
+    const retryTimers = mobileOAuthRetryTimersRef.current;
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== gameOrigin || event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data as {
@@ -128,12 +177,43 @@ export function GameTab({ accountId }: { accountId: string }) {
         type?: string;
         url?: string;
         kind?: string;
+        status?: string;
+        muted?: boolean;
+        requestId?: string;
+        accepted?: boolean;
         compatibilityVersion?: number;
       };
       if (data?.source !== "twelia-game") return;
       if (data.type === "bridge-ready") {
-        setMobileBridgeReady(true);
+        postMobileGameMuted(iframeRef.current, mobileUrl, mobileMutedRef.current);
+        requestMobileGameConnectionStatus(iframeRef.current, mobileUrl);
         console.info(`Pont du jeu mobile prêt (compatibilité ${data.compatibilityVersion ?? "?"})`);
+      }
+      if (
+        data.type === "mute-state" &&
+        typeof data.muted === "boolean" &&
+        data.muted !== mobileMutedRef.current
+      ) {
+        postMobileGameMuted(iframeRef.current, mobileUrl, mobileMutedRef.current);
+      }
+      if (
+        data.type === "connection-status" &&
+        ["connecting", "connected", "disconnected"].includes(data.status ?? "") &&
+        sessionId
+      ) {
+        const connectionStatus = data.status as "connecting" | "connected" | "disconnected";
+        useGameSessionStore.getState().setConnectionStatus(sessionId, connectionStatus);
+        void useAccountStore
+          .getState()
+          .setSessionStatus(accountId, connectionStatus === "connected" ? "valid" : "logged-out");
+      }
+      if (data.type === "oauth-callback-received" && data.accepted === true && data.requestId) {
+        const timer = retryTimers.get(data.requestId);
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+          retryTimers.delete(data.requestId);
+          setAuthError(undefined);
+        }
       }
       if (data.type === "open-auth" && data.url) {
         try {
@@ -170,29 +250,47 @@ export function GameTab({ accountId }: { accountId: string }) {
         handleGameAttention({ accountId, kind, sessionId });
       }
     };
-    const onOAuth = (event: Event) => {
-      const callback = (event as CustomEvent<MobileOAuthCallback>).detail;
-      if (callback.accountId !== accountId) return;
-      iframeRef.current?.contentWindow?.postMessage(
-        { source: "twelia-host", type: "oauth-callback", payload: callback.payload },
-        gameOrigin,
-      );
+    const onOAuth = (callback: MobileOAuthCallback) => {
+      const requestId = createId();
+      let attempts = 0;
+      const send = () => {
+        attempts += 1;
+        iframeRef.current?.contentWindow?.postMessage(
+          {
+            source: "twelia-host",
+            type: "oauth-callback",
+            requestId,
+            payload: callback.payload,
+          },
+          gameOrigin,
+        );
+        const timer = window.setTimeout(() => {
+          if (attempts >= 10) {
+            retryTimers.delete(requestId);
+            setAuthError(t("game.authCallbackFailed"));
+            return;
+          }
+          send();
+        }, 500);
+        retryTimers.set(requestId, timer);
+      };
+      setAuthError(undefined);
+      send();
     };
     window.addEventListener("message", onMessage);
-    window.addEventListener(MOBILE_OAUTH_CALLBACK_EVENT, onOAuth);
+    const unsubscribeOAuth = subscribeMobileOAuthCallback(accountId, onOAuth);
     return () => {
       window.removeEventListener("message", onMessage);
-      window.removeEventListener(MOBILE_OAUTH_CALLBACK_EVENT, onOAuth);
+      unsubscribeOAuth();
+      retryTimers.forEach((timer) => window.clearTimeout(timer));
+      retryTimers.clear();
     };
   }, [accountId, mobile, mobileUrl, sessionId, t]);
 
   useEffect(() => {
-    if (!mobile || !mobileUrl || !mobileBridgeReady) return;
-    iframeRef.current?.contentWindow?.postMessage(
-      { source: "twelia-host", type: "set-muted", muted: muteInactiveTabs && !active },
-      new URL(mobileUrl).origin,
-    );
-  }, [active, mobile, mobileBridgeReady, mobileUrl, muteInactiveTabs]);
+    if (!mobile) return;
+    postMobileGameMuted(iframeRef.current, mobileUrl, muteInactiveTabs && !active);
+  }, [active, mobile, mobileUrl, muteInactiveTabs]);
 
   if (!account) {
     return (
@@ -226,6 +324,10 @@ export function GameTab({ accountId }: { accountId: string }) {
           title={`DOFUS Touch — ${account.displayName}`}
           className="absolute left-0 top-0 block border-0 bg-black"
           allow="autoplay; fullscreen"
+          onLoad={() => {
+            postMobileGameMuted(iframeRef.current, mobileUrl, muteInactiveTabs && !active);
+            requestMobileGameConnectionStatus(iframeRef.current, mobileUrl);
+          }}
           style={
             mobileFrameLayout
               ? {

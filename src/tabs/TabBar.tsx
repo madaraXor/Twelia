@@ -28,7 +28,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
-import { useGameSessionStore } from "../game/GameSessionManager";
+import { findSessionByAccount, useGameSessionStore } from "../game/GameSessionManager";
 import { setGameSessionVisibility } from "../game/GameRuntime";
 import { useI18n } from "../i18n/i18n";
 import { useSettingsStore } from "../settings/settingsStore";
@@ -48,9 +48,7 @@ export function TabBar() {
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const activeSession =
-    activeTab?.type === "game"
-      ? Object.values(sessions).find((session) => session.accountId === activeTab.accountId)
-      : undefined;
+    activeTab?.type === "game" ? findSessionByAccount(sessions, activeTab.accountId) : undefined;
   const overlayOpen = Boolean(dropdownTabId || contextTabId || pendingClose);
 
   useEffect(() => {
@@ -71,9 +69,7 @@ export function TabBar() {
   };
 
   const sessionFor = (tab: WorkspaceTab) =>
-    tab.type === "game"
-      ? Object.values(sessions).find((session) => session.accountId === tab.accountId)
-      : undefined;
+    tab.type === "game" ? findSessionByAccount(sessions, tab.accountId) : undefined;
 
   const requestClose = (tab: WorkspaceTab) => {
     if (tab.type === "home") return;
