@@ -4,15 +4,13 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Toaster } from "@/components/ui/sonner";
 import { CommandPalette } from "../commands/CommandPalette";
 import { useCommandUiStore } from "../commands/commandStore";
 import { diagnosticLogger } from "../diagnostics/diagnosticLogger";
 import { findSessionByAccount, useGameSessionStore } from "../game/GameSessionManager";
-import {
-  needsBackgroundGameActivity,
-  shouldAutoSwitchToGame,
-  type GameAttentionEvent,
-} from "../game/gameAttention";
+import { needsBackgroundGameActivity, type GameAttentionEvent } from "../game/gameAttention";
+import { handleGameAttention } from "../game/handleGameAttention";
 import { keepGameSessionActive, setGameSessionVisibility } from "../game/GameRuntime";
 import { useMobileGameDeepLinks } from "../game/mobileGameBridge";
 import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
@@ -126,20 +124,12 @@ export function App() {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<GameAttentionEvent>("game-attention", ({ payload }) => {
-      const settings = useSettingsStore.getState();
-      if (!shouldAutoSwitchToGame(settings, payload.kind)) return;
       const session = useGameSessionStore.getState().sessions[payload.sessionId];
       if (!session) return;
-      const tabs = useTabStore.getState();
-      const target = tabs.tabs.find(
-        (tab) => tab.type === "game" && tab.accountId === session.accountId,
-      );
-      if (target?.id === tabs.activeTabId) return;
-      if (target) tabs.selectTab(target.id);
-      else tabs.openGame(session.accountId);
-      diagnosticLogger.info("game-attention", `Changement d’onglet: ${payload.kind}`, {
-        gameSessionId: payload.sessionId,
+      handleGameAttention({
         accountId: session.accountId,
+        kind: payload.kind,
+        sessionId: payload.sessionId,
       });
     }).then((cleanup) => {
       if (disposed) cleanup();
@@ -183,6 +173,7 @@ export function App() {
           <TabContent />
         </div>
         <CommandPalette />
+        <Toaster />
       </div>
     </ShortcutProvider>
   );

@@ -6,11 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccountStore } from "../accounts/accountStore";
 import { isMobilePlatform } from "../platform/platform";
-import { useSettingsStore } from "../settings/settingsStore";
-import { useTabStore } from "../tabs/tabStore";
 import { findSessionByAccount, useGameSessionStore } from "./GameSessionManager";
 import { getGameSessionUrl, layoutGameSession } from "./GameRuntime";
-import { shouldAutoSwitchToGame, type GameAttentionKind } from "./gameAttention";
+import { type GameAttentionKind } from "./gameAttention";
+import { handleGameAttention } from "./handleGameAttention";
 import {
   clearMobileOAuthTarget,
   MOBILE_OAUTH_CALLBACK_EVENT,
@@ -115,7 +114,7 @@ export function GameTab({ accountId }: { accountId: string }) {
     if (!mobile || !mobileUrl) return;
     const gameOrigin = new URL(mobileUrl).origin;
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== gameOrigin) return;
+      if (event.origin !== gameOrigin || event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data as {
         source?: string;
         type?: string;
@@ -159,11 +158,7 @@ export function GameTab({ accountId }: { accountId: string }) {
         ["combat-turn", "party-invitation", "group-fight"].includes(data.kind ?? "")
       ) {
         const kind = data.kind as GameAttentionKind;
-        if (!shouldAutoSwitchToGame(useSettingsStore.getState(), kind)) return;
-        const tab = useTabStore
-          .getState()
-          .tabs.find((candidate) => candidate.type === "game" && candidate.accountId === accountId);
-        if (tab) useTabStore.getState().selectTab(tab.id);
+        handleGameAttention({ accountId, kind, sessionId });
       }
     };
     const onOAuth = (event: Event) => {
@@ -180,7 +175,7 @@ export function GameTab({ accountId }: { accountId: string }) {
       window.removeEventListener("message", onMessage);
       window.removeEventListener(MOBILE_OAUTH_CALLBACK_EVENT, onOAuth);
     };
-  }, [accountId, mobile, mobileUrl]);
+  }, [accountId, mobile, mobileUrl, sessionId]);
 
   if (!account) {
     return (
