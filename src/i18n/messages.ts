@@ -61,6 +61,12 @@ export const fr = {
   "settings.reduceMotion.description": "Neutralise les pulsations et les transitions décoratives.",
   "settings.compactTabs.label": "Onglets compacts",
   "settings.compactTabs.description": "Réduit la largeur de la barre d’onglets.",
+  "settings.mobileQuickSwitch.label": "Barre de sessions rapide",
+  "settings.mobileQuickSwitch.description":
+    "Affiche les bulles de changement de session sur le bord gauche du jeu Android.",
+  "settings.mobileSessionPill.label": "Pilule de session",
+  "settings.mobileSessionPill.description":
+    "Affiche le nom et l’état de la session en bas de l’écran de jeu Android.",
   "settings.characterNames.label": "Afficher les personnages",
   "settings.characterNames.description": "Ajoute le personnage actif au libellé du compte.",
   "settings.notifications.label": "Indicateurs de notification",
@@ -166,6 +172,7 @@ export const fr = {
   "home.profile.other": "{{count}} profils",
   "home.savedAccounts": "Comptes enregistrés",
   "home.addAccount": "Ajouter un compte",
+  "home.addShort": "Ajouter",
   "home.firstProfile": "Créer votre premier profil",
   "home.noPassword": "Aucun mot de passe ne sera enregistré.",
   "home.newProfile": "Nouveau profil",
@@ -350,6 +357,12 @@ export const en = {
   "settings.reduceMotion.description": "Disables decorative pulses and transitions.",
   "settings.compactTabs.label": "Compact tabs",
   "settings.compactTabs.description": "Reduces the width of the tab bar.",
+  "settings.mobileQuickSwitch.label": "Quick session bar",
+  "settings.mobileQuickSwitch.description":
+    "Shows session-switching bubbles along the left edge of the Android game view.",
+  "settings.mobileSessionPill.label": "Session pill",
+  "settings.mobileSessionPill.description":
+    "Shows the session name and status at the bottom of the Android game screen.",
   "settings.characterNames.label": "Show character names",
   "settings.characterNames.description": "Adds the active character to the account label.",
   "settings.notifications.label": "Notification indicators",
@@ -453,6 +466,7 @@ export const en = {
   "home.profile.other": "{{count}} profiles",
   "home.savedAccounts": "Saved accounts",
   "home.addAccount": "Add account",
+  "home.addShort": "Add",
   "home.firstProfile": "Create your first profile",
   "home.noPassword": "No password will be saved.",
   "home.newProfile": "New profile",

@@ -20,31 +20,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAccountStore } from "../accounts/accountStore";
-import { useGameSessionStore } from "../game/GameSessionManager";
+import { getGameConnectionStatus } from "../game/gameConnection";
+import { findSessionByAccount, useGameSessionStore } from "../game/GameSessionManager";
 import { useI18n, type Translate } from "../i18n/i18n";
-import type { GameSessionStatus } from "../game/gameTypes";
+import type { GameSession } from "../game/gameTypes";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "./tabStore";
 import type { WorkspaceTab } from "./tabTypes";
 
-function statusDot(status?: GameSessionStatus) {
+function statusColor(session?: GameSession) {
+  const status = getGameConnectionStatus(session);
   return cn(
-    "size-2 shrink-0 rounded-full bg-muted-foreground",
-    ["running", "background"].includes(status ?? "") && "bg-success",
-    ["error", "disconnected", "stopped"].includes(status ?? "") && "bg-danger",
-    ["created", "starting", "authenticating"].includes(status ?? "") &&
-      "session-dot-pulse bg-warning",
-    status === "suspended" && "bg-warning",
+    "bg-muted-foreground",
+    status === "connected" && "bg-success",
+    status === "disconnected" && "bg-danger",
+    status === "connecting" && "session-dot-pulse bg-warning",
   );
 }
 
-function statusLabel(status: GameSessionStatus | undefined, t: Translate) {
-  if (["running", "background"].includes(status ?? "")) return t("session.status.connected");
-  if (["created", "starting", "authenticating"].includes(status ?? ""))
-    return t("session.status.connecting");
-  if (status === "suspended") return t("session.status.suspended");
-  if (["error", "disconnected", "stopped"].includes(status ?? ""))
-    return t("session.status.disconnected");
+function statusDot(session?: GameSession) {
+  return cn("size-2 shrink-0 rounded-full", statusColor(session));
+}
+
+function accountInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1) return `${words[0]?.[0] ?? ""}${words.at(-1)?.[0] ?? ""}`.toUpperCase();
+  return (words[0] ?? "?").slice(0, 2).toUpperCase();
+}
+
+function statusLabel(session: GameSession | undefined, t: Translate) {
+  const status = getGameConnectionStatus(session);
+  if (status === "connected") return t("session.status.connected");
+  if (status === "connecting") return t("session.status.connecting");
+  if (status === "disconnected") return t("session.status.disconnected");
   return t("session.status.check");
 }
 
@@ -54,6 +62,8 @@ export function MobileTabMenu() {
   const activeTabId = useTabStore((state) => state.activeTabId);
   const accounts = useAccountStore((state) => state.accounts);
   const sessions = useGameSessionStore((state) => state.sessions);
+  const showQuickSwitch = useSettingsStore((state) => state.showMobileQuickSwitch);
+  const showSessionPill = useSettingsStore((state) => state.showMobileSessionPill);
   const [open, setOpen] = useState(false);
   const [pendingClose, setPendingClose] = useState<WorkspaceTab>();
 
@@ -68,9 +78,7 @@ export function MobileTabMenu() {
   };
 
   const sessionFor = (tab: WorkspaceTab) =>
-    tab.type === "game"
-      ? Object.values(sessions).find((session) => session.accountId === tab.accountId)
-      : undefined;
+    tab.type === "game" ? findSessionByAccount(sessions, tab.accountId) : undefined;
 
   const close = async (tab: WorkspaceTab) => {
     if (tab.type === "game") {
@@ -83,7 +91,10 @@ export function MobileTabMenu() {
 
   const requestClose = (tab: WorkspaceTab) => {
     const session = sessionFor(tab);
-    if (session?.status === "running" && useSettingsStore.getState().confirmConnectedSessionClose) {
+    if (
+      session?.connectionStatus === "connected" &&
+      useSettingsStore.getState().confirmConnectedSessionClose
+    ) {
       setOpen(false);
       setPendingClose(tab);
       return;
@@ -106,6 +117,7 @@ export function MobileTabMenu() {
               activeTab?.type === "game"
                 ? "left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))]"
                 : "bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))]",
+              activeTab?.type !== "game" && "hidden",
             )}
             aria-label={t("tabs.mobile.open")}
           >
@@ -134,7 +146,7 @@ export function MobileTabMenu() {
                 className={cn("gap-3 px-3.5", active && "bg-surface-elevated font-extrabold")}
                 onSelect={() => useTabStore.getState().selectTab(tab.id)}
               >
-                <span className={statusDot(session?.status)} />
+                <span className={statusDot(session)} />
                 <span className="min-w-0 flex-1 truncate">{labelFor(tab)}</span>
                 {active && <Check className="text-primary" />}
               </DropdownMenuItem>
@@ -170,11 +182,46 @@ export function MobileTabMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {activeTab?.type === "game" && (
+      {activeTab?.type === "game" && showQuickSwitch && !open && gameTabs.length > 0 && (
+        <nav
+          className="fixed left-[max(.875rem,env(safe-area-inset-left))] top-[calc(max(1rem,env(safe-area-inset-top))+62px)] z-[65] flex max-h-[calc(100vh-6rem)] flex-col gap-2.5 overflow-y-auto p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label={t("settings.mobileQuickSwitch.label")}
+        >
+          {gameTabs.map((tab) => {
+            const session = sessionFor(tab);
+            const label = labelFor(tab);
+            const active = tab.id === activeTabId;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                title={label}
+                aria-label={label}
+                aria-current={active ? "page" : undefined}
+                onClick={() => useTabStore.getState().selectTab(tab.id)}
+                className={cn(
+                  "relative grid size-[46px] shrink-0 place-items-center rounded-[14px] border border-border-strong bg-background/80 text-sm font-extrabold text-muted-foreground shadow-[0_6px_16px_rgba(0,0,0,.45)] backdrop-blur-md transition-colors",
+                  active && "border-primary bg-primary/15 text-primary",
+                )}
+              >
+                {accountInitials(label)}
+                <span
+                  className={cn(
+                    "absolute -right-1 -top-1 size-3 rounded-full border-2 border-background",
+                    statusColor(session),
+                  )}
+                />
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      {activeTab?.type === "game" && showSessionPill && (
         <div className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/80 px-3.5 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md">
-          <span className={statusDot(activeSession?.status)} />
+          <span className={statusDot(activeSession)} />
           <span className="max-w-52 truncate">
-            {labelFor(activeTab)} · {statusLabel(activeSession?.status, t)}
+            {labelFor(activeTab)} · {statusLabel(activeSession, t)}
           </span>
         </div>
       )}

@@ -76,6 +76,18 @@ export const SETTING_SEARCH_ENTRIES: SettingSearchEntry[] = [
     keywords: "onglets tabs compact largeur width",
   },
   {
+    id: "mobile-quick-switch",
+    section: "interface",
+    labelKey: "settings.mobileQuickSwitch.label",
+    keywords: "android mobile bulles bubbles sessions rapide quick switch bord gauche",
+  },
+  {
+    id: "mobile-session-pill",
+    section: "interface",
+    labelKey: "settings.mobileSessionPill.label",
+    keywords: "android mobile pilule pill personnage character statut status bas écran",
+  },
+  {
     id: "character-names",
     section: "interface",
     labelKey: "settings.characterNames.label",

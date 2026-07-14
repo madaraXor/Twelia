@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { storageGateway } from "../storage/storageGateway";
 
 export type AppSettings = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   language: "system" | "fr" | "en";
   restoreTabs: boolean;
   confirmConnectedSessionClose: boolean;
@@ -13,6 +13,8 @@ export type AppSettings = {
   compactTabs: boolean;
   showCharacterNames: boolean;
   showNotifications: boolean;
+  showMobileQuickSwitch: boolean;
+  showMobileSessionPill: boolean;
   muteInactiveTabs: boolean;
   autoSwitchOnCombatTurn: boolean;
   autoSwitchOnPartyInvitation: boolean;
@@ -25,7 +27,7 @@ export type AppSettings = {
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   language: "system",
   restoreTabs: true,
   confirmConnectedSessionClose: true,
@@ -36,12 +38,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   compactTabs: false,
   showCharacterNames: true,
   showNotifications: true,
+  showMobileQuickSwitch: true,
+  showMobileSessionPill: false,
   muteInactiveTabs: true,
   autoSwitchOnCombatTurn: true,
   autoSwitchOnPartyInvitation: true,
   autoSwitchOnGroupFight: true,
-  limitBackgroundRendering: true,
-  suspendInactiveTabs: true,
+  limitBackgroundRendering: false,
+  suspendInactiveTabs: false,
   maxSessions: 4,
   renderQuality: "balanced",
   debugMode: import.meta.env.DEV && import.meta.env.VITE_TWELIA_DEBUG === "1",
@@ -50,15 +54,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export function migrateSettings(input: unknown): AppSettings {
   if (!input || typeof input !== "object") return DEFAULT_SETTINGS;
   const raw = input as Partial<AppSettings>;
+  const inputSchemaVersion = (input as { schemaVersion?: number }).schemaVersion;
   return {
     ...DEFAULT_SETTINGS,
     ...raw,
-    schemaVersion: 2,
+    schemaVersion: 3,
     language:
-      raw.schemaVersion === 2 &&
+      (inputSchemaVersion === 2 || inputSchemaVersion === 3) &&
       (raw.language === "system" || raw.language === "fr" || raw.language === "en")
         ? raw.language
         : DEFAULT_SETTINGS.language,
+    limitBackgroundRendering:
+      inputSchemaVersion === 3 && typeof raw.limitBackgroundRendering === "boolean"
+        ? raw.limitBackgroundRendering
+        : DEFAULT_SETTINGS.limitBackgroundRendering,
+    suspendInactiveTabs:
+      inputSchemaVersion === 3 && typeof raw.suspendInactiveTabs === "boolean"
+        ? raw.suspendInactiveTabs
+        : DEFAULT_SETTINGS.suspendInactiveTabs,
     interfaceScale:
       typeof raw.interfaceScale === "number"
         ? Math.min(1.4, Math.max(0.8, raw.interfaceScale))

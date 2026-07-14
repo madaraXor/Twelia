@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import {
   AlertTriangle,
   AppWindow,
+  ArrowLeft,
   Download,
   FileCheck2,
   Gamepad2,
@@ -54,11 +55,12 @@ import {
   type ClientInstallProgress,
   type ClientStatus,
 } from "../game/clientService";
-import { detectPlatform, isTauriRuntime } from "../platform/platform";
+import { detectPlatform, isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import { findShortcutConflicts, keyboardEventAccelerator } from "../shortcuts/shortcutRegistry";
 import { useShortcutStore } from "../shortcuts/shortcutStore";
 import type { ShortcutAction } from "../shortcuts/shortcutTypes";
 import type { SettingsSection } from "../tabs/tabTypes";
+import { useTabStore } from "../tabs/tabStore";
 import { useSettingsStore, type AppSettings } from "./settingsStore";
 import { SETTING_SEARCH_ENTRIES } from "./settingsCatalog";
 
@@ -101,6 +103,8 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
+  const mobile = isMobilePlatform();
+  const workspaceTabs = useTabStore((state) => state.tabs);
   const visibleSections = useMemo(() => {
     if (!query.trim()) return sections;
     return sections.filter(([id, labelKey]) =>
@@ -122,6 +126,81 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [activeSection]);
+
+  const activeSectionEntry = sections.find(([id]) => id === activeSection);
+  const lastGameTab = workspaceTabs.filter((tab) => tab.type === "game").at(-1);
+
+  if (mobile) {
+    return (
+      <Tabs
+        value={activeSection}
+        onValueChange={(value) => setSection(value as SettingsSection)}
+        className="grid h-full min-h-0 w-full overflow-hidden bg-[radial-gradient(circle_at_14%_0%,var(--color-surface-elevated),var(--color-background)_34rem)]"
+        style={{ gridTemplateColumns: "min(210px, 31vw) minmax(0, 1fr)" }}
+      >
+        <aside
+          data-testid="settings-navigation"
+          className="flex min-h-0 min-w-0 flex-col border-r border-border bg-chrome/55"
+        >
+          <div className="flex shrink-0 items-center gap-2.5 px-3.5 py-3">
+            <img src="/twelia-icon.png" alt="" className="size-6 object-contain" />
+            <span className="truncate font-serif text-lg font-semibold">{t("settings.title")}</span>
+          </div>
+          <div className="shrink-0 px-3 pb-2.5">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("settings.search.placeholder")}
+                className="h-10 bg-card pl-9 text-[13px]"
+                aria-label={t("settings.search.label")}
+              />
+            </div>
+          </div>
+          <TabsList className="flex h-auto min-h-0 w-full flex-1 flex-col items-stretch justify-start gap-0.5 overflow-y-auto bg-transparent px-2.5 pb-3">
+            {visibleSections.map(([id, labelKey, Icon]) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                className="h-11 w-full shrink-0 justify-start gap-2.5 rounded-[9px] px-3 text-[13px] data-[state=active]:bg-surface-elevated data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Icon className="size-4" /> <span className="truncate">{t(labelKey)}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {visibleSections.length === 0 && (
+            <p className="px-4 py-5 text-sm text-muted-foreground">{t("settings.search.empty")}</p>
+          )}
+        </aside>
+        <div className="flex min-h-0 min-w-0 flex-col">
+          <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+            <h1 className="truncate font-serif text-2xl font-semibold tracking-[-0.01em]">
+              {activeSectionEntry ? t(activeSectionEntry[1]) : t("settings.title")}
+            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 shrink-0"
+              disabled={!lastGameTab}
+              onClick={() => lastGameTab && useTabStore.getState().selectTab(lastGameTab.id)}
+            >
+              <ArrowLeft /> {t("home.backToGame")}
+            </Button>
+          </header>
+          <div
+            ref={contentRef}
+            data-testid="settings-scroll-panel"
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 [&_[data-settings-section-header]]:hidden"
+          >
+            <div className="w-full max-w-[820px]">
+              <SettingsPanels />
+            </div>
+          </div>
+        </div>
+      </Tabs>
+    );
+  }
 
   return (
     <Tabs
@@ -173,34 +252,42 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
           className="min-h-0 min-w-0 overflow-y-auto bg-background px-5 py-6 sm:px-8 lg:p-10"
         >
           <div className="w-full max-w-[820px]">
-            <TabsContent value="general" className="m-0">
-              <GeneralSection />
-            </TabsContent>
-            <TabsContent value="accounts" className="m-0">
-              <AccountsSection />
-            </TabsContent>
-            <TabsContent value="interface" className="m-0">
-              <InterfaceSection />
-            </TabsContent>
-            <TabsContent value="shortcuts" className="m-0">
-              <ShortcutsSection />
-            </TabsContent>
-            <TabsContent value="client" className="m-0">
-              <ClientSection />
-            </TabsContent>
-            <TabsContent value="performance" className="m-0">
-              <PerformanceSection />
-            </TabsContent>
-            <TabsContent value="logs" className="m-0">
-              <LogsSection />
-            </TabsContent>
-            <TabsContent value="about" className="m-0">
-              <AboutSection />
-            </TabsContent>
+            <SettingsPanels />
           </div>
         </div>
       </div>
     </Tabs>
+  );
+}
+
+function SettingsPanels() {
+  return (
+    <>
+      <TabsContent value="general" className="m-0">
+        <GeneralSection />
+      </TabsContent>
+      <TabsContent value="accounts" className="m-0">
+        <AccountsSection />
+      </TabsContent>
+      <TabsContent value="interface" className="m-0">
+        <InterfaceSection />
+      </TabsContent>
+      <TabsContent value="shortcuts" className="m-0">
+        <ShortcutsSection />
+      </TabsContent>
+      <TabsContent value="client" className="m-0">
+        <ClientSection />
+      </TabsContent>
+      <TabsContent value="performance" className="m-0">
+        <PerformanceSection />
+      </TabsContent>
+      <TabsContent value="logs" className="m-0">
+        <LogsSection />
+      </TabsContent>
+      <TabsContent value="about" className="m-0">
+        <AboutSection />
+      </TabsContent>
+    </>
   );
 }
 
@@ -214,7 +301,7 @@ function SectionHeader({
   description: string;
 }) {
   return (
-    <header className="mb-4">
+    <header className="mb-4" data-settings-section-header>
       <p className="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
         {eyebrow}
       </p>
@@ -437,6 +524,7 @@ function InterfaceSection() {
   const { t } = useI18n();
   const settings = useSettingsStore();
   const update = useUpdateSetting();
+  const mobile = isMobilePlatform();
   return (
     <section>
       <SectionHeader
@@ -483,6 +571,22 @@ function InterfaceSection() {
           checked={settings.reduceMotion}
           onChange={(value) => void update("reduceMotion", value)}
         />
+        {mobile && (
+          <>
+            <Toggle
+              label={t("settings.mobileQuickSwitch.label")}
+              description={t("settings.mobileQuickSwitch.description")}
+              checked={settings.showMobileQuickSwitch}
+              onChange={(value) => void update("showMobileQuickSwitch", value)}
+            />
+            <Toggle
+              label={t("settings.mobileSessionPill.label")}
+              description={t("settings.mobileSessionPill.description")}
+              checked={settings.showMobileSessionPill}
+              onChange={(value) => void update("showMobileSessionPill", value)}
+            />
+          </>
+        )}
         <Toggle
           label={t("settings.compactTabs.label")}
           description={t("settings.compactTabs.description")}
