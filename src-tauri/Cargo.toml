@@ -1,6 +1,6 @@
 [package]
 name = "twelia"
-version = "1.1.0"
+version = "1.2.0"
 description = "Espace de travail multi-session indépendant pour DOFUS Touch"
 authors = ["Twelia contributors"]
 license = "GPL-3.0-or-later"
