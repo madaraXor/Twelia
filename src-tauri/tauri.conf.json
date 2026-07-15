@@ -52,6 +52,11 @@
     "shortDescription": "Espace de travail multi-session indépendant",
     "longDescription": "Twelia organise des profils et sessions isolés sans inclure ni modifier les fichiers propriétaires du jeu.",
     "copyright": "Copyright © 2026 Twelia contributors",
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    },
     "android": {
       "minSdkVersion": 26
     }
