@@ -1,4 +1,10 @@
-import { closeTabState, openGameTabState, reorderTabState, useTabStore } from "./tabStore";
+import {
+  closeTabState,
+  openGameTabState,
+  reorderTabState,
+  settingsBackTabId,
+  useTabStore,
+} from "./tabStore";
 import { INITIAL_WORKSPACE, type WorkspaceState } from "./tabTypes";
 import { migrateWorkspace } from "./tabPersistence";
 
@@ -37,5 +43,14 @@ describe("workspace tabs", () => {
   it("ne ferme jamais l’accueil", () => {
     const state: WorkspaceState = { ...INITIAL_WORKSPACE };
     expect(closeTabState(state, "home")).toBe(state);
+  });
+
+  it("revient à l’accueil depuis les paramètres sans session de jeu", () => {
+    expect(settingsBackTabId(INITIAL_WORKSPACE.tabs)).toBe("home");
+  });
+
+  it("revient au dernier jeu depuis les paramètres lorsqu’une session existe", () => {
+    const workspace = openGameTabState(openGameTabState(INITIAL_WORKSPACE, "a"), "b");
+    expect(settingsBackTabId(workspace.tabs)).toBe("game:b");
   });
 });

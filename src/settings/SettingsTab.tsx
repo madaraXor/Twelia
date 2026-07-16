@@ -60,7 +60,7 @@ import { findShortcutConflicts, keyboardEventAccelerator } from "../shortcuts/sh
 import { useShortcutStore } from "../shortcuts/shortcutStore";
 import type { ShortcutAction } from "../shortcuts/shortcutTypes";
 import type { SettingsSection } from "../tabs/tabTypes";
-import { useTabStore } from "../tabs/tabStore";
+import { settingsBackTabId, useTabStore } from "../tabs/tabStore";
 import { useSettingsStore, type AppSettings } from "./settingsStore";
 import { SETTING_SEARCH_ENTRIES } from "./settingsCatalog";
 
@@ -128,7 +128,8 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
   }, [activeSection]);
 
   const activeSectionEntry = sections.find(([id]) => id === activeSection);
-  const lastGameTab = workspaceTabs.filter((tab) => tab.type === "game").at(-1);
+  const backTabId = settingsBackTabId(workspaceTabs);
+  const returnsToGame = backTabId !== "home";
 
   if (mobile) {
     return (
@@ -182,10 +183,9 @@ export function SettingsTab({ initialSection = "general" }: { initialSection?: S
               variant="outline"
               size="sm"
               className="h-10 shrink-0"
-              disabled={!lastGameTab}
-              onClick={() => lastGameTab && useTabStore.getState().selectTab(lastGameTab.id)}
+              onClick={() => useTabStore.getState().selectTab(backTabId)}
             >
-              <ArrowLeft /> {t("home.backToGame")}
+              <ArrowLeft /> {t(returnsToGame ? "home.backToGame" : "home.backToHome")}
             </Button>
           </header>
           <div

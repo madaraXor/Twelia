@@ -37,6 +37,10 @@ export function closeTabState(state: WorkspaceState, tabId: string): WorkspaceSt
   return { ...state, activeTabId, tabs };
 }
 
+export function settingsBackTabId(tabs: WorkspaceTab[]): string {
+  return tabs.filter((tab) => tab.type === "game").at(-1)?.id ?? "home";
+}
+
 export function reorderTabState(
   state: WorkspaceState,
   fromId: string,
