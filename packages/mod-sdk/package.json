@@ -1,0 +1,27 @@
+{
+  "name": "@twelia/mod-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "default": "./testing.mjs"
+    },
+    "./manifest.schema.json": "./manifest.schema.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "testing.mjs",
+    "testing.d.ts",
+    "manifest.schema.json",
+    "README.md"
+  ]
+}

@@ -28,6 +28,11 @@ Prérequis :
 - Rust avec la cible `aarch64-linux-android` ;
 - un appareil avec le débogage USB activé ou un émulateur ARM64.
 
+Le script `pnpm tauri` détecte aussi `libclang` dans le NDK pour compiler le moteur de mods
+QuickJS. Les variables `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, `ANDROID_HOME` et
+`ANDROID_SDK_ROOT` sont utilisées en priorité ; à défaut, les emplacements Android Studio usuels
+sont inspectés.
+
 ```bash
 rustup target add aarch64-linux-android
 pnpm install --frozen-lockfile

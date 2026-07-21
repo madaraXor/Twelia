@@ -15,7 +15,8 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "tauri": "tauri"
+    "mod": "node scripts/mods.mjs",
+    "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
     "@fontsource/hanken-grotesk": "^5.2.8",
