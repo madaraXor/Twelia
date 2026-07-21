@@ -9,6 +9,8 @@ pub enum AppError {
     Authentication(String),
     #[error("Runtime error: {0}")]
     Runtime(String),
+    #[error("Mod error: {0}")]
+    Mods(String),
     #[error("Distribution error: {0}")]
     Distribution(String),
     #[error("Invalid input: {0}")]
@@ -34,6 +36,7 @@ impl From<AppError> for CommandError {
             AppError::Storage(_) => ("STORAGE_ERROR", "storage", true),
             AppError::Authentication(_) => ("SECURE_STORE_ERROR", "authentication", true),
             AppError::Runtime(_) => ("RUNTIME_ERROR", "runtime", true),
+            AppError::Mods(_) => ("MOD_ERROR", "mods", true),
             AppError::Distribution(_) => ("DISTRIBUTION_ERROR", "distribution", true),
             AppError::InvalidInput(_) => ("INVALID_INPUT", "storage", true),
             AppError::Platform(_) => ("PLATFORM_ERROR", "platform", false),

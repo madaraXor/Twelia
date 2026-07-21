@@ -3,6 +3,7 @@ mod diagnostics;
 mod distribution;
 mod error;
 mod game_server;
+mod mods;
 mod redaction;
 mod secure_storage;
 mod sessions;
@@ -20,6 +21,7 @@ pub struct AppState {
     storage: StorageService,
     secure_store: Arc<dyn SecureSessionStore>,
     sessions: SessionManager,
+    mods: mods::ModSupervisor,
     redactor: Arc<dyn SensitiveDataRedactor>,
     game_server: game_server::GameServer,
     client_installing: AtomicBool,
@@ -58,6 +60,8 @@ pub fn run() {
             let paths = storage.paths();
             let game_server = game_server::GameServer::start(paths.client_runtime.clone())
                 .map_err(|error| error.to_string())?;
+            let mods = mods::ModSupervisor::with_app(paths.mods.clone(), app.handle().clone())
+                .map_err(|error| error.to_string())?;
             let redactor: Arc<dyn SensitiveDataRedactor> = Arc::new(DefaultRedactor);
             log::info!(
                 "{}",
@@ -67,6 +71,7 @@ pub fn run() {
                 storage,
                 secure_store: Arc::new(SystemSecureSessionStore),
                 sessions: SessionManager::default(),
+                mods,
                 redactor,
                 game_server,
                 client_installing: AtomicBool::new(false),
@@ -81,6 +86,28 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::load_state,
             commands::save_state,
+            commands::list_installed_mods,
+            commands::create_mod_project,
+            commands::open_mod_entry,
+            commands::open_mod_game_entry,
+            commands::get_mods_enabled,
+            commands::set_mods_enabled,
+            commands::set_mod_enabled,
+            commands::get_mod_settings,
+            commands::set_mod_setting,
+            commands::reset_mod_settings,
+            commands::complete_mod_file_dialog,
+            commands::load_mod_instance,
+            commands::unload_mod_instance,
+            commands::reload_mod_instance,
+            commands::reload_mod_instances,
+            commands::list_mod_instances,
+            commands::list_mod_logs,
+            commands::clear_mod_logs,
+            commands::list_mod_commands,
+            commands::dispatch_mod_command,
+            commands::list_mod_ui_panels,
+            commands::dispatch_mod_ui_action,
             commands::create_game_session,
             commands::start_game_session,
             commands::get_game_session_url,

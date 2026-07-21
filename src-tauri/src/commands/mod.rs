@@ -6,8 +6,11 @@ use crate::{
         installer::{InstallOutcome, InstallProgress, install_client},
     },
     error::{AppError, CommandResult},
+    mods::{
+        InstalledMod, ModCommandSnapshot, ModInstanceSnapshot, ModLogEntry, ModUiPanelSnapshot,
+    },
     secure_storage::StoredSession,
-    sessions::{GameSession, GameViewBounds},
+    sessions::{GameSession, GameSessionStatus, GameViewBounds},
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -47,9 +50,282 @@ pub async fn start_game_session(
 ) -> CommandResult<()> {
     state
         .sessions
-        .start(&app, &state.storage, &state.game_server, &session_id)
+        .start(&app, &state.storage, &state.game_server, &session_id)?;
+    let session = state.sessions.get(&session_id)?;
+    match state.mods.reconcile_session(&session) {
+        Ok(report) if !report.errors.is_empty() => {
+            log::warn!(
+                "{} mod(s) n'ont pas démarré pour la session {}",
+                report.errors.len(),
+                session_id
+            );
+        }
+        Ok(_) => {}
+        Err(error) => log::warn!("supervision des mods indisponible: {error}"),
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_installed_mods(state: State<'_, AppState>) -> CommandResult<Vec<InstalledMod>> {
+    state.mods.list_installed().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn create_mod_project(name: String, state: State<'_, AppState>) -> CommandResult<InstalledMod> {
+    let installed = state.mods.create_project(&name)?;
+    if state.mods.globally_enabled()? {
+        for session in state.sessions.list().into_iter().filter(|session| {
+            matches!(
+                session.status,
+                GameSessionStatus::Running
+                    | GameSessionStatus::Background
+                    | GameSessionStatus::Suspended
+            )
+        }) {
+            if let Err(error) = state.mods.reconcile_session(&session) {
+                log::warn!(
+                    "nouveau mod non démarré pour la session {}: {error}",
+                    session.id
+                );
+            }
+        }
+    }
+    Ok(installed)
+}
+
+#[tauri::command]
+pub fn open_mod_entry(
+    mod_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    let path = state.mods.project_entry(&mod_id)?;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|error| AppError::Platform(format!("ouverture du mod impossible: {error}")).into())
+}
+
+#[tauri::command]
+pub fn open_mod_game_entry(
+    mod_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    let path = state.mods.project_game_entry(&mod_id)?;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|error| AppError::Platform(format!("ouverture du mod impossible: {error}")).into())
+}
+
+#[tauri::command]
+pub fn get_mods_enabled(state: State<'_, AppState>) -> CommandResult<bool> {
+    state.mods.globally_enabled().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn set_mods_enabled(enabled: bool, state: State<'_, AppState>) -> CommandResult<()> {
+    state.mods.set_globally_enabled(enabled)?;
+    if enabled {
+        for session in state.sessions.list().into_iter().filter(|session| {
+            matches!(
+                session.status,
+                GameSessionStatus::Running
+                    | GameSessionStatus::Background
+                    | GameSessionStatus::Suspended
+            )
+        }) {
+            if let Err(error) = state.mods.reconcile_session(&session) {
+                log::warn!(
+                    "activation globale des mods non appliquée à la session {}: {error}",
+                    session.id
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_mod_enabled(
+    mod_id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state.mods.set_mod_enabled(&mod_id, enabled)?;
+    if state.mods.globally_enabled()? {
+        for session in state.sessions.list().into_iter().filter(|session| {
+            matches!(
+                session.status,
+                GameSessionStatus::Running
+                    | GameSessionStatus::Background
+                    | GameSessionStatus::Suspended
+            )
+        }) {
+            if let Err(error) = state.mods.reconcile_session(&session) {
+                log::warn!(
+                    "activation du mod {mod_id} non appliquée à la session {}: {error}",
+                    session.id
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_mod_settings(mod_id: String, state: State<'_, AppState>) -> CommandResult<Value> {
+    state.mods.mod_settings(&mod_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn set_mod_setting(
+    mod_id: String,
+    key: String,
+    value: Value,
+    state: State<'_, AppState>,
+) -> CommandResult<Value> {
+    state
+        .mods
+        .set_mod_setting(&mod_id, &key, value)
         .map_err(Into::into)
 }
+
+#[tauri::command]
+pub fn reset_mod_settings(mod_id: String, state: State<'_, AppState>) -> CommandResult<Value> {
+    state.mods.reset_mod_settings(&mod_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn complete_mod_file_dialog(
+    request_id: String,
+    path: Option<String>,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state
+        .mods
+        .complete_file_dialog(&request_id, path)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn load_mod_instance(
+    session_id: String,
+    mod_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<ModInstanceSnapshot> {
+    let session = state.sessions.get(&session_id)?;
+    if !matches!(
+        session.status,
+        GameSessionStatus::Running | GameSessionStatus::Background | GameSessionStatus::Suspended
+    ) {
+        return Err(AppError::Mods(format!("la session {session_id} n’est pas active")).into());
+    }
+    state.mods.load_mod(&session, &mod_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn unload_mod_instance(
+    session_id: String,
+    mod_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state.sessions.get(&session_id)?;
+    state
+        .mods
+        .unload_mod(&session_id, &mod_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn reload_mod_instance(
+    session_id: String,
+    mod_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<ModInstanceSnapshot> {
+    let session = state.sessions.get(&session_id)?;
+    state.mods.unload_mod(&session_id, &mod_id)?;
+    state.mods.load_mod(&session, &mod_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn reload_mod_instances(
+    mod_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<ModInstanceSnapshot>> {
+    let session_ids = state
+        .mods
+        .snapshots()?
+        .into_iter()
+        .filter(|snapshot| snapshot.mod_id == mod_id)
+        .map(|snapshot| snapshot.session_id)
+        .collect::<Vec<_>>();
+    let mut reloaded = Vec::new();
+    for session_id in session_ids {
+        let session = state.sessions.get(&session_id)?;
+        state.mods.unload_mod(&session_id, &mod_id)?;
+        reloaded.push(state.mods.load_mod(&session, &mod_id)?);
+    }
+    Ok(reloaded)
+}
+
+#[tauri::command]
+pub fn list_mod_instances(state: State<'_, AppState>) -> CommandResult<Vec<ModInstanceSnapshot>> {
+    state.mods.snapshots().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_mod_logs(session_id: Option<String>, state: State<'_, AppState>) -> Vec<ModLogEntry> {
+    state.mods.logs(session_id.as_deref())
+}
+
+#[tauri::command]
+pub fn clear_mod_logs(session_id: Option<String>, state: State<'_, AppState>) {
+    state.mods.clear_logs(session_id.as_deref());
+}
+
+#[tauri::command]
+pub fn list_mod_commands(state: State<'_, AppState>) -> Vec<ModCommandSnapshot> {
+    state.mods.commands()
+}
+
+#[tauri::command]
+pub fn dispatch_mod_command(
+    mod_id: String,
+    session_id: String,
+    command_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state
+        .mods
+        .dispatch_command(&mod_id, &session_id, &command_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_mod_ui_panels(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Vec<ModUiPanelSnapshot> {
+    state.mods.ui_panels(&session_id)
+}
+
+#[tauri::command]
+pub fn dispatch_mod_ui_action(
+    session_id: String,
+    mod_id: String,
+    panel_id: String,
+    action_id: String,
+    value: Option<Value>,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state.sessions.get(&session_id)?;
+    state
+        .mods
+        .dispatch_ui_action(&session_id, &mod_id, &panel_id, &action_id, value)
+        .map_err(Into::into)
+}
+
 #[tauri::command]
 pub fn get_game_session_url(
     session_id: String,
@@ -139,10 +415,11 @@ pub fn suspend_game_session(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<()> {
-    state
-        .sessions
-        .suspend(&app, &session_id)
-        .map_err(Into::into)
+    state.sessions.suspend(&app, &session_id)?;
+    let _ = state
+        .mods
+        .dispatch_session(&session_id, "session.suspended", &serde_json::json!({}));
+    Ok(())
 }
 #[tauri::command]
 pub fn keep_game_session_active(
@@ -161,7 +438,11 @@ pub fn resume_game_session(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<()> {
-    state.sessions.resume(&app, &session_id).map_err(Into::into)
+    state.sessions.resume(&app, &session_id)?;
+    let _ = state
+        .mods
+        .dispatch_session(&session_id, "session.resumed", &serde_json::json!({}));
+    Ok(())
 }
 #[tauri::command]
 pub fn reload_game_session(
@@ -169,7 +450,11 @@ pub fn reload_game_session(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<()> {
-    state.sessions.reload(&app, &session_id).map_err(Into::into)
+    state.sessions.reload(&app, &session_id)?;
+    let _ = state
+        .mods
+        .dispatch_session(&session_id, "session.reloaded", &serde_json::json!({}));
+    Ok(())
 }
 #[tauri::command]
 pub fn stop_game_session(
@@ -177,6 +462,7 @@ pub fn stop_game_session(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<()> {
+    state.mods.stop_session(&session_id)?;
     state.sessions.stop(&app, &session_id).map_err(Into::into)
 }
 #[tauri::command]
@@ -185,6 +471,7 @@ pub fn destroy_game_session(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<()> {
+    state.mods.stop_session(&session_id)?;
     state
         .sessions
         .destroy(&app, &session_id)
@@ -237,6 +524,7 @@ pub fn delete_secure_session(account_id: String, state: State<'_, AppState>) -> 
 
 #[tauri::command]
 pub fn delete_account_data(account_id: String, state: State<'_, AppState>) -> CommandResult<()> {
+    state.mods.clear_account(&account_id)?;
     state.secure_store.delete_session(&account_id)?;
     state
         .storage

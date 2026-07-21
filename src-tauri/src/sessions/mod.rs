@@ -1,5 +1,10 @@
 #[cfg(desktop)]
 use crate::distribution::installer::RuntimeVersions;
+#[cfg(desktop)]
+use crate::{
+    AppState,
+    mods::{mod_game_side_ready_sequence, parse_mod_game_event, parse_mod_game_side_event},
+};
 use crate::{error::AppError, game_server::GameServer, storage::StorageService};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -147,12 +152,67 @@ impl SessionManager {
         let oauth_game_label = label.clone();
         let attention_app = app.clone();
         let attention_session_id = session_id.to_owned();
+        let mod_event_app = app.clone();
+        let mod_event_session_id = session_id.to_owned();
+        let mod_game_side_sequences = Arc::new(Mutex::new(HashMap::<(String, u64), u64>::new()));
         let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
             .user_agent(&user_agent)
             .data_directory(data_directory)
             .initialization_script(GAME_EVENT_BRIDGE_SCRIPT)
-            .on_document_title_changed(move |_webview, title| {
-                if let Some(kind) = game_attention_kind(&title) {
+            .on_document_title_changed(move |webview, title| {
+                if mod_game_side_ready_sequence(&title).is_some() {
+                    if let Ok(mut sequences) = mod_game_side_sequences.lock() {
+                        sequences.clear();
+                    }
+                    if let Some(state) = mod_event_app.try_state::<AppState>()
+                        && let Err(error) = state
+                            .mods
+                            .reload_game_entries(&mod_event_session_id)
+                    {
+                        log::warn!("gameEntry non réinjectés après navigation: {error}");
+                    }
+                } else if let Some(message) = parse_mod_game_side_event(&title) {
+                    let should_dispatch = mod_game_side_sequences
+                        .lock()
+                        .map(|mut sequences| {
+                            let key = (message.mod_id.clone(), message.channel_id);
+                            if sequences
+                                .get(&key)
+                                .is_some_and(|sequence| *sequence >= message.sequence)
+                            {
+                                false
+                            } else {
+                                sequences.insert(key, message.sequence);
+                                true
+                            }
+                        })
+                        .unwrap_or(true);
+                    if should_dispatch
+                        && let Some(state) = mod_event_app.try_state::<AppState>()
+                        && let Err(error) = state.mods.dispatch_game_side(
+                            &mod_event_session_id,
+                            &message.mod_id,
+                            &message.event,
+                            &message.payload,
+                        )
+                    {
+                        log::warn!("message gameEntry de {} non transmis: {error}", message.mod_id);
+                    }
+                    let _ = webview.eval(format!(
+                        "window.__TWELIA_MOD_CONTENT_BRIDGE__?.ack({});",
+                        message.sequence
+                    ));
+                } else if let Some((event, payload)) = parse_mod_game_event(&title) {
+                    if let Some(state) = mod_event_app.try_state::<AppState>()
+                        && let Err(error) = state.mods.dispatch_session(
+                            &mod_event_session_id,
+                            &event,
+                            &payload,
+                        )
+                    {
+                        log::warn!("événement de jeu non transmis aux mods: {error}");
+                    }
+                } else if let Some(kind) = game_attention_kind(&title) {
                     let payload = serde_json::json!({
                         "sessionId": attention_session_id,
                         "kind": kind,
@@ -620,187 +680,7 @@ fn webview_label(session_id: &str) -> String {
 }
 
 #[cfg(desktop)]
-const GAME_EVENT_BRIDGE_SCRIPT: &str = r#"
-(function installTweliaAudioBridge() {
-  if (window.__TWELIA_AUDIO_BRIDGE__) return;
-  window.__TWELIA_AUDIO_BRIDGE__ = true;
-  var muted = false;
-  var howlerWasMuted;
-  var mediaMuteStates = new WeakMap();
-  var webAudioGains = [];
-  var webAudioContexts = [];
-  var webAudioGainByContext = new WeakMap();
-  var originalAudioConnect = window.AudioNode && window.AudioNode.prototype.connect;
-  var originalAudioDisconnect = window.AudioNode && window.AudioNode.prototype.disconnect;
-
-  function masterGainFor(context) {
-    var existing = webAudioGainByContext.get(context);
-    if (existing) return existing;
-    var master = context.createGain();
-    master.gain.value = muted ? 0 : 1;
-    webAudioGainByContext.set(context, master);
-    webAudioGains.push(master);
-    webAudioContexts.push(context);
-    originalAudioConnect.call(master, context.destination);
-    return master;
-  }
-
-  if (originalAudioConnect) {
-    window.AudioNode.prototype.connect = function (destination, output, input) {
-      if (this.context && destination === this.context.destination) {
-        var master = masterGainFor(this.context);
-        if (arguments.length >= 3) return originalAudioConnect.call(this, master, output, 0);
-        if (arguments.length >= 2) return originalAudioConnect.call(this, master, output);
-        return originalAudioConnect.call(this, master);
-      }
-      return originalAudioConnect.apply(this, arguments);
-    };
-  }
-
-  if (originalAudioDisconnect) {
-    window.AudioNode.prototype.disconnect = function (destination, output, input) {
-      if (this.context && destination === this.context.destination) {
-        var master = webAudioGainByContext.get(this.context);
-        if (master) {
-          if (arguments.length >= 3) return originalAudioDisconnect.call(this, master, output, 0);
-          if (arguments.length >= 2) return originalAudioDisconnect.call(this, master, output);
-          return originalAudioDisconnect.call(this, master);
-        }
-      }
-      return originalAudioDisconnect.apply(this, arguments);
-    };
-  }
-
-  function applyMutedState() {
-    webAudioGains.forEach(function (master) {
-      master.gain.value = muted ? 0 : 1;
-    });
-    if (!muted) {
-      webAudioContexts.forEach(function (context) {
-        if (context.state === "suspended" && typeof context.resume === "function") {
-          context.resume().catch(function () {});
-        }
-      });
-    }
-    if (window.Howler && typeof window.Howler.mute === "function") {
-      if (muted) {
-        if (howlerWasMuted === undefined) howlerWasMuted = Boolean(window.Howler._muted);
-        window.Howler.mute(true);
-      } else if (howlerWasMuted !== undefined) {
-        window.Howler.mute(howlerWasMuted);
-        howlerWasMuted = undefined;
-      }
-    }
-    document.querySelectorAll("audio,video").forEach(function (media) {
-      if (muted) {
-        if (!mediaMuteStates.has(media)) mediaMuteStates.set(media, media.muted);
-        media.muted = true;
-      } else if (mediaMuteStates.has(media)) {
-        media.muted = mediaMuteStates.get(media);
-        mediaMuteStates.delete(media);
-      }
-    });
-  }
-
-  window.__TWELIA_SET_MUTED__ = function (nextMuted) {
-    muted = Boolean(nextMuted);
-    applyMutedState();
-  };
-
-  new MutationObserver(applyMutedState).observe(document, { childList: true, subtree: true });
-  window.setInterval(applyMutedState, 1000);
-})();
-
-(function installTweliaAttentionBridge() {
-  if (window.__TWELIA_ATTENTION_BRIDGE__) return;
-  window.__TWELIA_ATTENTION_BRIDGE__ = true;
-  var sequence = 0;
-  var attempts = 0;
-  var timer;
-
-  function forward(kind) {
-    sequence += 1;
-    document.title = "__TWELIA_ATTENTION__:" + kind + ":" + sequence;
-  }
-
-  function installListeners() {
-    var connection = window.connectionManager;
-    var gui = window.gui;
-    var playerData = gui && gui.playerData;
-    var characters = playerData && playerData.characters;
-    if (!connection || typeof connection.on !== "function" || !characters) return false;
-
-    function onTurn(message) {
-      if (!message || typeof characters.canControlCharacterId !== "function") return;
-      if (characters.canControlCharacterId(message.id)) forward("combat-turn");
-    }
-
-    connection.on("GameFightTurnStartMessage", onTurn);
-    connection.on("GameFightTurnResumeMessage", onTurn);
-    connection.on("GameFightTurnStartSlaveMessage", onTurn);
-    connection.on("PartyInvitationMessage", function () {
-      forward("party-invitation");
-    });
-    connection.on("PartyMemberInFightMessage", function (message) {
-      var currentGui = window.gui;
-      var data = currentGui && currentGui.playerData;
-      if (!data || !message || !message.fightMap) return;
-      if (data.isFighting && !data.isSpectator) return;
-      if (
-        data.labyrinthData &&
-        typeof data.labyrinthData.isInTheLabyrinth === "function" &&
-        data.labyrinthData.isInTheLabyrinth()
-      ) return;
-      if (!data.position || data.position.mapId !== message.fightMap.mapId) return;
-      forward("group-fight");
-    });
-    return true;
-  }
-
-  function tryInstall() {
-    attempts += 1;
-    if (installListeners() || attempts >= 1200) window.clearInterval(timer);
-  }
-
-  timer = window.setInterval(tryInstall, 250);
-  tryInstall();
-})();
-
-(function installTweliaShortcutBridge() {
-  if (window.__TWELIA_SHORTCUT_BRIDGE__) return;
-  window.__TWELIA_SHORTCUT_BRIDGE__ = true;
-  window.__TWELIA_SHORTCUTS__ = window.__TWELIA_SHORTCUTS__ || [];
-  var sequence = 0;
-
-  function acceleratorFor(event) {
-    var parts = [];
-    if (event.ctrlKey) parts.push("Ctrl");
-    if (event.metaKey) parts.push("Meta");
-    if (event.altKey) parts.push("Alt");
-    if (event.shiftKey) parts.push("Shift");
-    var code = event.code === "Comma"
-      ? "Comma"
-      : event.code.replace(/^Key/, "").replace(/^Digit/, "");
-    if (!/^(Control|Meta|Alt|Shift)(Left|Right)$/.test(event.code)) parts.push(code);
-    return parts.join("+");
-  }
-
-  window.addEventListener("keydown", function (event) {
-    var target = event.target;
-    if (
-      target &&
-      target.closest &&
-      target.closest("input, textarea, select, [contenteditable='true']")
-    ) return;
-    var accelerator = acceleratorFor(event);
-    if (window.__TWELIA_SHORTCUTS__.indexOf(accelerator) === -1) return;
-    sequence += 1;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    document.title = "__TWELIA_SHORTCUT__:" + accelerator + ":" + sequence;
-  }, true);
-})();
-"#;
+const GAME_EVENT_BRIDGE_SCRIPT: &str = include_str!("game_event_bridge.js");
 
 #[cfg(any(desktop, test))]
 fn game_attention_kind(title: &str) -> Option<&str> {
@@ -885,5 +765,16 @@ mod tests {
         assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("window.AudioNode.prototype.disconnect"));
         assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("context.resume()"));
         assert!(!GAME_EVENT_BRIDGE_SCRIPT.contains("AudioContext.suspend"));
+    }
+
+    #[test]
+    fn mod_bridge_exposes_only_atomic_fight_commands() {
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("possiblePlacements"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("reachableCells"));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("case \"setFightPlacement\""));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("case \"moveInFight\""));
+        assert!(GAME_EVENT_BRIDGE_SCRIPT.contains("case \"castFightSpell\""));
+        assert!(!GAME_EVENT_BRIDGE_SCRIPT.contains("nearest-enemy"));
+        assert!(!GAME_EVENT_BRIDGE_SCRIPT.contains("lowest-life-enemy"));
     }
 }
