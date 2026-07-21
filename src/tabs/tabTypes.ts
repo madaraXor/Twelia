@@ -2,6 +2,7 @@ export type SettingsSection =
   "general" | "accounts" | "interface" | "shortcuts" | "client" | "performance" | "logs" | "about";
 
 export type HomeTab = { id: "home"; type: "home"; pinned: true };
+export type ModsTab = { id: "mods"; type: "mods" };
 export type GameTab = {
   id: string;
   type: "game";
@@ -15,7 +16,7 @@ export type SettingsTab = {
   settingsSection?: SettingsSection;
 };
 
-export type WorkspaceTab = HomeTab | GameTab | SettingsTab;
+export type WorkspaceTab = HomeTab | ModsTab | GameTab | SettingsTab;
 
 export type WorkspaceState = {
   schemaVersion: 1;

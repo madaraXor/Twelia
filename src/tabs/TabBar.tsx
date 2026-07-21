@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { MoreHorizontal, Pin, PinOff, Plus, RefreshCw, Settings, X } from "lucide-react";
+import { MoreHorizontal, Pin, PinOff, Plus, Puzzle, RefreshCw, Settings, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +61,7 @@ export function TabBar() {
 
   const labelFor = (tab: WorkspaceTab) => {
     if (tab.type === "home") return "Twelia";
+    if (tab.type === "mods") return t("mods.page.title");
     if (tab.type === "settings") return t("common.settings");
     return (
       accounts.find((account) => account.id === tab.accountId)?.displayName ??
@@ -167,6 +168,7 @@ export function TabBar() {
                           />
                         )}
                         {tab.type === "settings" && <Settings className="size-4 shrink-0" />}
+                        {tab.type === "mods" && <Puzzle className="size-4 shrink-0" />}
                         {tab.type === "game" && (
                           <span
                             className={cn(

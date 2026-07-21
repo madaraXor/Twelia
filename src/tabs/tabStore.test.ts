@@ -53,4 +53,18 @@ describe("workspace tabs", () => {
     const workspace = openGameTabState(openGameTabState(INITIAL_WORKSPACE, "a"), "b");
     expect(settingsBackTabId(workspace.tabs)).toBe("game:b");
   });
+
+  it("ouvre et restaure un seul onglet Mods", () => {
+    useTabStore.setState({ ...INITIAL_WORKSPACE, recentlyClosed: [], hydrated: true });
+    useTabStore.getState().openMods();
+    useTabStore.getState().openMods();
+    const workspace = {
+      schemaVersion: 1 as const,
+      activeTabId: useTabStore.getState().activeTabId,
+      tabs: useTabStore.getState().tabs,
+    };
+    expect(workspace.tabs.filter((tab) => tab.type === "mods")).toHaveLength(1);
+    expect(workspace.activeTabId).toBe("mods");
+    expect(migrateWorkspace(JSON.parse(JSON.stringify(workspace)))).toEqual(workspace);
+  });
 });

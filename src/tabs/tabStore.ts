@@ -66,6 +66,7 @@ type TabState = WorkspaceState & {
   hydrate: () => Promise<void>;
   selectTab: (id: string) => void;
   openGame: (accountId: string) => void;
+  openMods: () => void;
   openSettings: (section?: SettingsSection) => void;
   closeTab: (id: string) => void;
   reopenLast: () => void;
@@ -90,6 +91,15 @@ export const useTabStore = create<TabState>((set, get) => ({
   },
   openGame: (accountId) => {
     const next = openGameTabState(get(), accountId);
+    set(next);
+    persist(next);
+  },
+  openMods: () => {
+    const state = get();
+    const tabs = state.tabs.some((tab) => tab.id === "mods")
+      ? state.tabs
+      : [...state.tabs, { id: "mods" as const, type: "mods" as const }];
+    const next = { schemaVersion: 1 as const, activeTabId: "mods", tabs };
     set(next);
     persist(next);
   },

@@ -135,4 +135,10 @@ export const SETTING_SEARCH_ENTRIES: SettingSearchEntry[] = [
     labelKey: "settings.debug.label",
     keywords: "diagnostic debug logs journaux technique technical",
   },
+  {
+    id: "mods-enabled",
+    section: "general",
+    labelKey: "settings.mods.enabled.label",
+    keywords: "mods extensions scripts activer désactiver enable disable sécurité",
+  },
 ];

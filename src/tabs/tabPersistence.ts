@@ -9,9 +9,11 @@ function normalizeTabs(input: unknown): WorkspaceTab[] {
     const candidate = tab as Partial<WorkspaceTab>;
     if (typeof candidate.id !== "string" || seen.has(candidate.id)) return false;
     if (candidate.type === "home" && candidate.id !== "home") return false;
+    if (candidate.type === "mods" && candidate.id !== "mods") return false;
     if (candidate.type === "settings" && candidate.id !== "settings") return false;
     if (candidate.type === "game" && typeof candidate.accountId !== "string") return false;
-    if (!candidate.type || !["home", "settings", "game"].includes(candidate.type)) return false;
+    if (!candidate.type || !["home", "mods", "settings", "game"].includes(candidate.type))
+      return false;
     seen.add(candidate.id);
     return true;
   });

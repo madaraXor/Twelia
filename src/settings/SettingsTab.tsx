@@ -48,6 +48,7 @@ import { useGameSessionStore } from "../game/GameSessionManager";
 import { useI18n } from "../i18n/i18n";
 import type { MessageKey } from "../i18n/messages";
 import { needsBackgroundGameActivity } from "../game/gameAttention";
+import { useModStore } from "../mods/modStore";
 import {
   getClientStatus,
   installGameClient,
@@ -77,7 +78,7 @@ const sections: Array<[SettingsSection, MessageKey, typeof AppWindow]> = [
 
 const sectionSearchTerms: Record<SettingsSection, string> = {
   general:
-    "général langue démarrage restauration fermeture mise à jour changement automatique combat invitation",
+    "général langue démarrage restauration fermeture mise à jour changement automatique combat invitation mods scripts extensions",
   accounts: "comptes profils défaut session données",
   interface:
     "interface apparence thème clair sombre système taille échelle onglets notifications animations",
@@ -346,11 +347,13 @@ function Toggle({
   description,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string;
   description: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -358,7 +361,13 @@ function Toggle({
       <Label htmlFor={id} className="cursor-pointer">
         <SettingCopy label={label} description={description} />
       </Label>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} aria-label={label} />
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-label={label}
+      />
     </SettingRow>
   );
 }
@@ -412,6 +421,24 @@ function GeneralSection() {
   const { t } = useI18n();
   const settings = useSettingsStore();
   const update = useUpdateSetting();
+  const modsEnabled = useModStore((state) => state.enabled);
+  const modsLoading = useModStore((state) => state.loading);
+  const [modsError, setModsError] = useState<string>();
+  useEffect(() => {
+    void useModStore
+      .getState()
+      .load()
+      .catch((error) => setModsError(toTweliaError(error).message));
+  }, []);
+  const updateMods = async (enabled: boolean) => {
+    setModsError(undefined);
+    try {
+      await useModStore.getState().setEnabled(enabled);
+      if (!enabled) useTabStore.getState().closeTab("mods");
+    } catch (error) {
+      setModsError(toTweliaError(error).message);
+    }
+  };
   return (
     <section>
       <SectionHeader
@@ -453,7 +480,20 @@ function GeneralSection() {
           checked={settings.checkUpdatesAutomatically}
           onChange={(value) => void update("checkUpdatesAutomatically", value)}
         />
+        <Toggle
+          label={t("settings.mods.enabled.label")}
+          description={t("settings.mods.enabled.description")}
+          checked={modsEnabled}
+          disabled={modsLoading}
+          onChange={(value) => void updateMods(value)}
+        />
       </SettingsCard>
+      {modsError && (
+        <Alert variant="destructive" className="mt-4">
+          <AlertTriangle />
+          <AlertDescription>{modsError}</AlertDescription>
+        </Alert>
+      )}
       <Card className="mt-4">
         <CardHeader>
           <CardTitle className="text-base">{t("settings.autoSwitch.title")}</CardTitle>

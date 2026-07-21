@@ -1,5 +1,12 @@
 export type TweliaErrorCategory =
-  "storage" | "authentication" | "network" | "distribution" | "runtime" | "platform" | "unknown";
+  | "storage"
+  | "authentication"
+  | "network"
+  | "distribution"
+  | "runtime"
+  | "mods"
+  | "platform"
+  | "unknown";
 
 export type TweliaError = {
   code: string;

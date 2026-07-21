@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccountStore } from "../accounts/accountStore";
 import { createId } from "../core/id";
 import { useI18n } from "../i18n/i18n";
+import { ModLogDock } from "../mods/ModLogDock";
 import { isMobilePlatform } from "../platform/platform";
 import { useSettingsStore } from "../settings/settingsStore";
 import { useTabStore } from "../tabs/tabStore";
@@ -307,46 +308,46 @@ export function GameTab({ accountId }: { accountId: string }) {
   const failed = session?.status === "error";
   if (mobile && session?.status === "running" && mobileUrl) {
     return (
-      <main
-        ref={viewportRef}
-        className="game-page relative h-full min-h-0 overflow-hidden bg-black"
-      >
-        {authError && (
-          <Alert variant="destructive" className="absolute left-3 right-3 top-3 z-20 w-auto">
-            <TriangleAlert />
-            <AlertTitle>{t("game.authFailed")}</AlertTitle>
-            <AlertDescription>{authError}</AlertDescription>
-          </Alert>
-        )}
-        <iframe
-          ref={iframeRef}
-          src={mobileUrl}
-          title={`DOFUS Touch — ${account.displayName}`}
-          className="absolute left-0 top-0 block border-0 bg-black"
-          allow="autoplay; fullscreen"
-          onLoad={() => {
-            postMobileGameMuted(iframeRef.current, mobileUrl, muteInactiveTabs && !active);
-            requestMobileGameConnectionStatus(iframeRef.current, mobileUrl);
-          }}
-          style={
-            mobileFrameLayout
-              ? {
-                  width: mobileFrameLayout.width,
-                  height: mobileFrameLayout.height,
-                  transform: `scale(${mobileFrameLayout.scale})`,
-                  transformOrigin: "top left",
-                }
-              : { width: "100%", height: "100%" }
-          }
-        />
+      <main className="game-page flex h-full min-h-0 overflow-hidden bg-black">
+        <section ref={viewportRef} className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+          {authError && (
+            <Alert variant="destructive" className="absolute left-3 right-3 top-3 z-20 w-auto">
+              <TriangleAlert />
+              <AlertTitle>{t("game.authFailed")}</AlertTitle>
+              <AlertDescription>{authError}</AlertDescription>
+            </Alert>
+          )}
+          <iframe
+            ref={iframeRef}
+            src={mobileUrl}
+            title={`DOFUS Touch — ${account.displayName}`}
+            className="absolute left-0 top-0 block border-0 bg-black"
+            allow="autoplay; fullscreen"
+            onLoad={() => {
+              postMobileGameMuted(iframeRef.current, mobileUrl, muteInactiveTabs && !active);
+              requestMobileGameConnectionStatus(iframeRef.current, mobileUrl);
+            }}
+            style={
+              mobileFrameLayout
+                ? {
+                    width: mobileFrameLayout.width,
+                    height: mobileFrameLayout.height,
+                    transform: `scale(${mobileFrameLayout.scale})`,
+                    transformOrigin: "top left",
+                  }
+                : { width: "100%", height: "100%" }
+            }
+          />
+        </section>
+        <ModLogDock sessionId={sessionId} />
       </main>
     );
   }
   return (
-    <main className="game-page grid h-full min-h-0 grid-rows-[1fr]">
+    <main className="game-page flex h-full min-h-0 overflow-hidden">
       <section
         ref={viewportRef}
-        className="game-viewport relative min-h-0 min-w-0 overflow-hidden bg-black"
+        className="game-viewport relative min-h-0 min-w-0 flex-1 overflow-hidden bg-black"
       >
         <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle,var(--color-card),var(--color-background)_62%)] p-6 text-center">
           <Card className="w-full max-w-lg bg-card/85 backdrop-blur">
@@ -391,6 +392,7 @@ export function GameTab({ accountId }: { accountId: string }) {
           </Card>
         </div>
       </section>
+      <ModLogDock sessionId={sessionId} />
     </main>
   );
 }

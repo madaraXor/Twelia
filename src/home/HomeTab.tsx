@@ -9,6 +9,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Puzzle,
   RefreshCw,
   Settings,
   Trash2,
@@ -48,6 +49,7 @@ import {
 } from "../game/clientService";
 import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import { useI18n } from "../i18n/i18n";
+import { useModStore } from "../mods/modStore";
 import { useTabStore } from "../tabs/tabStore";
 
 export function HomeTab() {
@@ -59,6 +61,7 @@ export function HomeTab() {
   const removeAccount = useAccountStore((state) => state.removeAccount);
   const setSessionStatus = useAccountStore((state) => state.setSessionStatus);
   const openGame = useTabStore((state) => state.openGame);
+  const modsEnabled = useModStore((state) => state.enabled);
   const tabs = useTabStore((state) => state.tabs);
   const gameTabs = useMemo(() => tabs.filter((tab) => tab.type === "game"), [tabs]);
   const lastGameTab = gameTabs.at(-1);
@@ -179,6 +182,16 @@ export function HomeTab() {
                   <ArrowLeft /> {t("home.backToGame")}
                 </Button>
               )}
+              {modsEnabled && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs"
+                  onClick={() => useTabStore.getState().openMods()}
+                >
+                  <Puzzle /> {t("mods.page.title")}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -275,6 +288,11 @@ export function HomeTab() {
               onClick={() => useTabStore.getState().selectTab(lastGameTab.id)}
             >
               <ArrowLeft /> {t("home.backToGame")}
+            </Button>
+          )}
+          {modsEnabled && (
+            <Button variant="outline" onClick={() => useTabStore.getState().openMods()}>
+              <Puzzle /> {t("mods.page.title")}
             </Button>
           )}
           <Button variant="outline" onClick={() => useTabStore.getState().openSettings()}>

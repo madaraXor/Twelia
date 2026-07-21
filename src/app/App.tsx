@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +21,7 @@ import {
 } from "../game/GameRuntime";
 import { useI18n } from "../i18n/i18n";
 import { useMobileGameDeepLinks } from "../game/mobileGameBridge";
+import { ModCommandShortcuts } from "../mods/ModCommandShortcuts";
 import { isMobilePlatform, isTauriRuntime } from "../platform/platform";
 import { ShortcutProvider } from "../shortcuts/ShortcutProvider";
 import { useSettingsStore } from "../settings/settingsStore";
@@ -27,6 +31,19 @@ import { MobileTabMenu } from "../tabs/MobileTabMenu";
 import { useTabStore } from "../tabs/tabStore";
 import { startup } from "./startup";
 import { DesktopTitleBar } from "./DesktopTitleBar";
+
+type ModNotificationEvent = {
+  modId: string;
+  sessionId: string;
+  title: string;
+  body: string;
+};
+
+type ModFileDialogEvent = {
+  requestId: string;
+  operation: "open" | "save";
+  suggestedName?: string;
+};
 
 export function App() {
   const { t } = useI18n();
@@ -51,6 +68,58 @@ export function App() {
         setStartupError(error instanceof Error ? error.message : String(error));
         setReady(true);
       });
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<ModFileDialogEvent>("mod-file-dialog", ({ payload }) => {
+      void (async () => {
+        let path: string | null = null;
+        try {
+          if (payload.operation === "save") {
+            path = await saveFileDialog({ defaultPath: payload.suggestedName });
+          } else {
+            const selected = await openFileDialog({ multiple: false, directory: false });
+            path = typeof selected === "string" ? selected : null;
+          }
+        } finally {
+          await invoke("complete_mod_file_dialog", {
+            requestId: payload.requestId,
+            path,
+          });
+        }
+      })().catch((error) => {
+        diagnosticLogger.warn("mods", `Sélecteur de fichier du mod interrompu : ${String(error)}`);
+      });
+    }).then((cleanup) => {
+      if (disposed) cleanup();
+      else unlisten = cleanup;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<ModNotificationEvent>("mod-notification", ({ payload }) => {
+      toast(payload.title, {
+        description: payload.body,
+        id: `mod-${payload.modId}-${payload.sessionId}-${payload.title}`,
+      });
+    }).then((cleanup) => {
+      if (disposed) cleanup();
+      else unlisten = cleanup;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -178,6 +247,7 @@ export function App() {
 
   return (
     <ShortcutProvider>
+      <ModCommandShortcuts />
       <div className="app-shell" style={{ fontSize: `${interfaceScale}rem` }}>
         {!mobile && <DesktopTitleBar />}
         {mobile ? <MobileTabMenu /> : <TabBar />}

@@ -1,5 +1,13 @@
-import { useMemo } from "react";
-import { FileSearch, Gamepad2, Home, RotateCw, Settings, TerminalSquare } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FileSearch,
+  Gamepad2,
+  Home,
+  Puzzle,
+  RotateCw,
+  Settings,
+  TerminalSquare,
+} from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -11,8 +19,11 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAccountStore } from "../accounts/accountStore";
+import { diagnosticLogger } from "../diagnostics/diagnosticLogger";
 import { useGameSessionStore } from "../game/GameSessionManager";
 import { useI18n } from "../i18n/i18n";
+import { dispatchModCommand, listModCommands } from "../mods/modService";
+import type { ModCommand } from "../mods/modTypes";
 import { SETTING_SEARCH_ENTRIES } from "../settings/settingsCatalog";
 import { useTabStore } from "../tabs/tabStore";
 import { useCommandUiStore } from "./commandStore";
@@ -33,6 +44,23 @@ export function CommandPalette() {
   const close = useCommandUiStore((state) => state.closePalette);
   const accounts = useAccountStore((state) => state.accounts);
   const tabs = useTabStore((state) => state.tabs);
+  const [modCommands, setModCommands] = useState<ModCommand[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void listModCommands()
+      .then((commands) => {
+        if (active) setModCommands(commands);
+      })
+      .catch((error: unknown) => {
+        if (active) setModCommands([]);
+        diagnosticLogger.warn("mods", `Commandes indisponibles : ${String(error)}`);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
 
   const commands = useMemo<CommandEntry[]>(
     () => [
@@ -51,11 +79,20 @@ export function CommandPalette() {
               ? "Twelia"
               : tab.type === "settings"
                 ? t("common.settings")
-                : (accounts.find((account) => account.id === tab.accountId)?.displayName ??
-                  t("common.session")),
+                : tab.type === "mods"
+                  ? t("mods.page.title")
+                  : (accounts.find((account) => account.id === tab.accountId)?.displayName ??
+                    t("common.session")),
         }),
         group: t("command.group.tabs"),
-        icon: tab.type === "game" ? Gamepad2 : tab.type === "settings" ? Settings : Home,
+        icon:
+          tab.type === "game"
+            ? Gamepad2
+            : tab.type === "settings"
+              ? Settings
+              : tab.type === "mods"
+                ? Puzzle
+                : Home,
         run: () => useTabStore.getState().selectTab(tab.id),
       })),
       {
@@ -113,8 +150,20 @@ export function CommandPalette() {
           run: () => useTabStore.getState().openSettings(setting.section),
         };
       }),
+      ...modCommands.map((command) => ({
+        id: `mod-${command.modId}-${command.sessionId}-${command.id}`,
+        label: command.title,
+        group: t("command.group.mods"),
+        icon: Puzzle,
+        keywords: [command.modId, command.sessionId, command.description ?? ""],
+        run: () => {
+          void dispatchModCommand(command).catch((error: unknown) => {
+            diagnosticLogger.warn("mods", `Commande refusée : ${String(error)}`);
+          });
+        },
+      })),
     ],
-    [accounts, t, tabs],
+    [accounts, modCommands, t, tabs],
   );
 
   const groups = [...new Set(commands.map((command) => command.group))];

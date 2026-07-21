@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Gamepad2, RefreshCw, Settings, X } from "lucide-react";
+import { Check, Gamepad2, Puzzle, RefreshCw, Settings, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +70,7 @@ export function MobileTabMenu() {
   const gameTabs = tabs.filter((tab) => tab.type === "game");
   const labelFor = (tab: WorkspaceTab) => {
     if (tab.type === "home") return t("home.label");
+    if (tab.type === "mods") return t("mods.page.title");
     if (tab.type === "settings") return t("common.settings");
     return (
       accounts.find((account) => account.id === tab.accountId)?.displayName ??
@@ -160,6 +161,11 @@ export function MobileTabMenu() {
           <DropdownMenuItem onSelect={() => useTabStore.getState().openSettings()}>
             <Settings /> {t("common.settings")}
           </DropdownMenuItem>
+          {tabs.some((tab) => tab.type === "mods") && (
+            <DropdownMenuItem onSelect={() => useTabStore.getState().openMods()}>
+              <Puzzle /> {t("mods.page.title")}
+            </DropdownMenuItem>
+          )}
 
           {activeTab?.type === "game" && (
             <>
