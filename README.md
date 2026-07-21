@@ -119,7 +119,7 @@ docs/                        Architecture, sécurité et limites
 
 Merci de ne jamais publier de jeton, cookie, capture contenant des données personnelles, fichier `key.properties`, keystore ou rapport non vérifié dans une issue.
 
-Pour les détails techniques, consulter [l’isolation des sessions](docs/session-isolation.md), [la distribution du client](docs/game-distribution-research.md), [les diagnostics](docs/diagnostics.md) et [Android](docs/android.md).
+Pour les détails techniques, consulter [l’isolation des sessions](docs/session-isolation.md), [la distribution du client](docs/game-distribution-research.md), [les diagnostics](docs/diagnostics.md), [les fondations du système de mods](docs/mods.md) et [Android](docs/android.md).
 
 ## Licence
 
