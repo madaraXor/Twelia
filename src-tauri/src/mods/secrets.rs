@@ -205,7 +205,7 @@ fn entry(mod_id: &str, account_id: &str, key: &str) -> Result<PlatformEntry, App
     static INITIALIZED: OnceLock<Result<(), String>> = OnceLock::new();
     let initialized = INITIALIZED.get_or_init(|| {
         android_native_keyring_store::Store::new()
-            .map(keyring_core::set_default_store)
+            .map(|store| keyring_core::set_default_store(store))
             .map_err(|error| error.to_string())
     });
     if let Err(error) = initialized {
